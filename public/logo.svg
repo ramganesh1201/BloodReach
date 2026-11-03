@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 130 169" width="130" height="169" fill="none">
+  <defs>
+    <!-- Outer Location Pin Red Gradient -->
+    <linearGradient id="pinRedGradient" x1="65" y1="0" x2="65" y2="169" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF334B" />
+      <stop offset="50%" stop-color="#E61E38" />
+      <stop offset="100%" stop-color="#B80D25" />
+    </linearGradient>
+
+    <!-- Inner Blood Drop Red Gradient -->
+    <linearGradient id="dropRedGradient" x1="65" y1="35" x2="65" y2="95" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF4D63" />
+      <stop offset="100%" stop-color="#D9142A" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Pin Pinhead Shape -->
+  <path d="M 65 0 C 100.89 0 130 29.11 130 65 C 130 96.8 104.5 132.4 65 169 C 25.5 132.4 0 96.8 0 65 C 0 29.11 29.11 0 65 0 Z" fill="url(#pinRedGradient)" />
+
+  <!-- Inner Dark Cavity Cutout -->
+  <path d="M 65 20 C 89.85 20 110 40.15 110 65 C 110 88.5 90.2 114 65 142 C 39.8 114 20 88.5 20 65 C 20 40.15 40.15 20 65 20 Z" fill="#0F172A" />
+
+  <!-- Inner Blood Drop -->
+  <path d="M 65 35 C 65 35 44 60 44 74 C 44 85.6 53.4 95 65 95 C 76.6 95 86 85.6 86 74 C 86 60 65 35 65 35 Z" fill="url(#dropRedGradient)" />
+
+  <!-- Blood Drop Light Reflection Highlight -->
+  <path d="M 54 66 C 52 70 52 76 55 80" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity="0.65" />
+
+  <!-- Supporting Hand Cradling the Drop (Bottom Cutout inside cavity) -->
+  <path d="M 32 94 C 40 92 48 94 56 102 C 64 110 74 114 85 110 C 94 106 99 98 100 92 C 100 92 90 106 78 106 C 68 106 58 98 48 92 C 40 88 34 91 32 94 Z" fill="url(#pinRedGradient)" />
+</svg>

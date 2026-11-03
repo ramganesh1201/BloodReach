@@ -1,0 +1,17 @@
+{
+  "name": "BloodReach",
+  "short_name": "BloodReach",
+  "description": "Emergency blood coordination and rapid response network",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#DC2626",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
