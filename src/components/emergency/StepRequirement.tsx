@@ -1,6 +1,6 @@
 import React from 'react';
 import { BloodGroup, BloodComponent, UrgencyLevel } from '../../types';
-import { Minus, Plus, AlertCircle } from 'lucide-react';
+import { Minus, Plus, AlertCircle, ArrowRight } from 'lucide-react';
 
 interface StepRequirementProps {
   bloodGroup: BloodGroup;
@@ -33,18 +33,29 @@ export const StepRequirement: React.FC<StepRequirementProps> = ({
   onNext,
 }) => {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div>
-        <h2 className="text-xl font-bold text-slate-900">Step 1 — Requirement Details</h2>
-        <p className="text-sm text-slate-600">Specify the required blood group, component type, and urgency.</p>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand bg-brand-light px-2 py-0.5 rounded-sm">
+            Step 1 of 4
+          </span>
+          <span className="text-xs text-app-text-secondary">Mandatory Clinical Details</span>
+        </div>
+        <h2 className="text-xl font-bold text-app-text">Blood Requirement Details</h2>
+        <p className="text-xs text-app-text-secondary mt-0.5">
+          Specify the requested blood group, blood component type, required units, and urgency level.
+        </p>
       </div>
 
       {/* Blood Group Selection */}
-      <div>
-        <label className="block text-sm font-semibold text-slate-800 mb-2">
-          Blood Group Required <span className="text-red-600">*</span>
-        </label>
-        <div className="grid grid-cols-4 gap-2 sm:gap-3">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="block text-xs font-bold text-app-text">
+            Blood Group Required <span className="text-emergency">*</span>
+          </label>
+          <span className="text-[11px] text-app-text-secondary">Compatible donors matched automatically</span>
+        </div>
+        <div className="grid grid-cols-4 gap-2 sm:gap-2.5">
           {BLOOD_GROUPS.map((group) => {
             const selected = bloodGroup === group;
             return (
@@ -52,10 +63,10 @@ export const StepRequirement: React.FC<StepRequirementProps> = ({
                 key={group}
                 type="button"
                 onClick={() => onChange({ bloodGroup: group })}
-                className={`py-3 px-2 rounded-lg text-base font-bold text-center border transition-all ${
+                className={`py-2.5 px-2 rounded-lg text-sm font-bold text-center border transition-all ${
                   selected
-                    ? 'bg-red-600 text-white border-red-600 shadow-sm ring-2 ring-red-600 ring-offset-1'
-                    : 'bg-white text-slate-800 border-slate-300 hover:border-red-300 hover:bg-red-50/50'
+                    ? 'bg-brand text-white border-brand shadow-xs ring-2 ring-brand/30'
+                    : 'bg-app-surface text-app-text border-app-border hover:border-brand/40 hover:bg-brand-light/30'
                 }`}
               >
                 {group}
@@ -66,10 +77,13 @@ export const StepRequirement: React.FC<StepRequirementProps> = ({
       </div>
 
       {/* Component Type */}
-      <div>
-        <label className="block text-sm font-semibold text-slate-800 mb-2">
-          Blood Component <span className="text-red-600">*</span>
-        </label>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="block text-xs font-bold text-app-text">
+            Blood Component <span className="text-emergency">*</span>
+          </label>
+          <span className="text-[11px] text-app-text-secondary">Verified against pathology inventory</span>
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {COMPONENTS.map((comp) => {
             const selected = component === comp;
@@ -78,10 +92,10 @@ export const StepRequirement: React.FC<StepRequirementProps> = ({
                 key={comp}
                 type="button"
                 onClick={() => onChange({ component: comp })}
-                className={`py-2.5 px-3 rounded-lg text-sm font-medium text-center border transition-colors ${
+                className={`py-2.5 px-3 rounded-lg text-xs font-semibold text-center border transition-colors ${
                   selected
-                    ? 'bg-slate-900 text-white border-slate-900 font-semibold'
-                    : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+                    ? 'bg-app-text text-white border-app-text font-bold shadow-xs'
+                    : 'bg-app-surface text-app-text border-app-border hover:border-app-border hover:bg-app-muted'
                 }`}
               >
                 {comp}
@@ -92,30 +106,34 @@ export const StepRequirement: React.FC<StepRequirementProps> = ({
       </div>
 
       {/* Units Required Stepper */}
-      <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex items-center justify-between">
+      <div className="bg-app-muted/50 p-4 rounded-xl border border-app-border flex items-center justify-between">
         <div>
-          <label className="block text-sm font-semibold text-slate-800">
-            Units Required <span className="text-red-600">*</span>
+          <label className="block text-xs font-bold text-app-text">
+            Required Units (350–450 ml per unit) <span className="text-emergency">*</span>
           </label>
-          <span className="text-xs text-slate-500">1 unit = approx. 350–450 ml</span>
+          <span className="text-[11px] text-app-text-secondary">Standard transfusion order unit</span>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => onChange({ unitsRequired: Math.max(1, unitsRequired - 1) })}
-            className="w-10 h-10 rounded-lg border border-slate-300 bg-white text-slate-700 flex items-center justify-center hover:bg-slate-100 disabled:opacity-50"
             disabled={unitsRequired <= 1}
+            className="w-8 h-8 rounded-lg bg-app-surface border border-app-border flex items-center justify-center text-app-text hover:bg-app-muted disabled:opacity-40 transition-colors shadow-xs"
             aria-label="Decrease units"
           >
             <Minus className="w-4 h-4" />
           </button>
-          <span className="text-xl font-bold text-slate-900 w-8 text-center">{unitsRequired}</span>
+
+          <span className="font-mono text-lg font-bold text-app-text w-8 text-center" aria-live="polite">
+            {unitsRequired}
+          </span>
+
           <button
             type="button"
             onClick={() => onChange({ unitsRequired: Math.min(10, unitsRequired + 1) })}
-            className="w-10 h-10 rounded-lg border border-slate-300 bg-white text-slate-700 flex items-center justify-center hover:bg-slate-100 disabled:opacity-50"
             disabled={unitsRequired >= 10}
+            className="w-8 h-8 rounded-lg bg-app-surface border border-app-border flex items-center justify-center text-app-text hover:bg-app-muted disabled:opacity-40 transition-colors shadow-xs"
             aria-label="Increase units"
           >
             <Plus className="w-4 h-4" />
@@ -123,10 +141,10 @@ export const StepRequirement: React.FC<StepRequirementProps> = ({
         </div>
       </div>
 
-      {/* Urgency Selection */}
-      <div>
-        <label className="block text-sm font-semibold text-slate-800 mb-2">
-          Urgency Level <span className="text-red-600">*</span>
+      {/* Urgency Level */}
+      <div className="space-y-2">
+        <label className="block text-xs font-bold text-app-text">
+          Clinical Urgency Level <span className="text-emergency">*</span>
         </label>
         <div className="space-y-2">
           {URGENCIES.map(({ level, description }) => {
@@ -134,30 +152,35 @@ export const StepRequirement: React.FC<StepRequirementProps> = ({
             return (
               <label
                 key={level}
-                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
                   selected
-                    ? 'border-red-600 bg-red-50/60 ring-1 ring-red-600'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
+                    ? level === 'Critical'
+                      ? 'border-emergency bg-emergency-light/60 ring-1 ring-emergency'
+                      : 'border-brand bg-brand-light/60 ring-1 ring-brand'
+                    : 'border-app-border hover:bg-app-muted/50 bg-app-surface'
                 }`}
               >
                 <input
                   type="radio"
                   name="urgency"
-                  value={level}
                   checked={selected}
                   onChange={() => onChange({ urgency: level })}
-                  className="mt-1 text-red-600 focus:ring-red-500"
+                  className="mt-0.5 text-brand focus:ring-brand"
                 />
-                <div>
+                <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-slate-900">{level}</span>
+                    <span className={`text-xs font-bold ${
+                      level === 'Critical' ? 'text-emergency' : level === 'Urgent' ? 'text-warning-dark' : 'text-app-text'
+                    }`}>
+                      {level}
+                    </span>
                     {level === 'Critical' && (
-                      <span className="text-[10px] font-bold bg-red-600 text-white px-1.5 py-0.5 rounded">
-                        High Priority
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-emergency-light text-emergency px-1.5 py-0.2 rounded-sm border border-emergency-border">
+                        Immediate Alert
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-600">{description}</p>
+                  <p className="text-[11px] text-app-text-secondary mt-0.5">{description}</p>
                 </div>
               </label>
             );
@@ -165,13 +188,15 @@ export const StepRequirement: React.FC<StepRequirementProps> = ({
         </div>
       </div>
 
-      <div className="pt-4 flex justify-end">
+      {/* Next Step Action */}
+      <div className="flex justify-end pt-2 border-t border-app-border">
         <button
           type="button"
           onClick={onNext}
-          className="bg-red-600 text-white hover:bg-red-700 font-semibold px-6 py-2.5 rounded-lg text-sm transition-colors shadow-sm"
+          className="bg-brand hover:bg-brand-dark text-white font-bold text-xs py-2.5 px-5 rounded-lg transition-colors shadow-xs flex items-center gap-2"
         >
-          Continue to Location →
+          <span>Continue to Hospital Location</span>
+          <ArrowRight className="w-4 h-4" />
         </button>
       </div>
     </div>

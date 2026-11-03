@@ -1,7 +1,7 @@
 {
-  "name": "BloodReach",
-  "short_name": "BloodReach",
-  "description": "Emergency blood coordination and rapid response network",
+  "name": "CareLoop — Blood Donation Coordination Platform",
+  "short_name": "CareLoop",
+  "description": "Real-time emergency blood coordination connecting patients, accredited blood banks, and verified volunteer donors.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F8FAFC",

@@ -17,9 +17,9 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({ allowedRoles, children }) 
   if (isAuthLoading) {
     return (
       <div className="max-w-md mx-auto py-24 px-4 text-center space-y-4">
-        <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto shadow-sm" />
-        <h3 className="text-base font-bold text-slate-900">Preparing your BloodReach workspace...</h3>
-        <p className="text-xs text-slate-500">Verifying authorization and resolving workspace permissions.</p>
+        <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto shadow-sm" />
+        <h3 className="text-base font-semibold text-app-text-primary">Preparing CareLoop workspace...</h3>
+        <p className="text-xs text-app-text-secondary">Verifying clinical credentials and workspace permissions.</p>
       </div>
     );
   }
@@ -28,15 +28,15 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({ allowedRoles, children }) 
   if (authError) {
     return (
       <div className="max-w-md mx-auto py-16 px-4 text-center space-y-6">
-        <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-card space-y-5">
-          <div className="w-14 h-14 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto border border-red-100">
-            <ShieldAlert className="w-8 h-8" />
+        <div className="bg-app-surface rounded-xl border border-app-border p-8 shadow-card space-y-5">
+          <div className="w-12 h-12 rounded-full bg-red-50 text-emergency flex items-center justify-center mx-auto border border-red-100">
+            <ShieldAlert className="w-6 h-6" />
           </div>
 
           <div className="space-y-1">
-            <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Workspace Unavailable</h2>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              We couldn't determine your BloodReach role. Please try again or contact an administrator.
+            <h2 className="text-lg font-bold text-app-text-primary tracking-tight">Workspace Unavailable</h2>
+            <p className="text-xs text-app-text-secondary leading-relaxed">
+              We couldn't determine your CareLoop authorization role. Please verify your credentials or contact the network administrator.
             </p>
           </div>
 
@@ -44,16 +44,16 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({ allowedRoles, children }) 
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl text-xs transition-colors inline-flex items-center gap-1.5"
+              className="bg-brand hover:bg-brand-dark text-white font-medium py-2 px-4 rounded-lg text-xs transition-colors inline-flex items-center gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Try Again
             </button>
             <button
               type="button"
               onClick={() => signOut()}
-              className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold py-2 px-4 rounded-xl text-xs transition-colors inline-flex items-center gap-1.5"
+              className="bg-app-surface border border-app-border text-app-text-primary hover:bg-app-muted font-medium py-2 px-4 rounded-lg text-xs transition-colors inline-flex items-center gap-1.5"
             >
-              <LogOut className="w-3.5 h-3.5" /> Sign Out
+              <LogOut className="w-3.5 h-3.5 text-app-text-secondary" /> Sign Out
             </button>
           </div>
         </div>

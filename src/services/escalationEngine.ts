@@ -3,29 +3,29 @@ import { EscalationConfig, EmergencyRequest } from '../types';
 export const ESCALATION_LEVELS: EscalationConfig[] = [
   {
     level: 1,
-    name: 'Level 1 — Immediate Proximity',
-    description: 'Notifying registered responders within 5 km and checking nearby verified blood-centre inventory.',
-    radiusKm: 5,
-    autoEscalateMinutes: 10,
+    name: 'Level 1 — Immediate Vicinity',
+    description: 'Alerting registered compatible donors within 10 km and cross-checking verified partner blood centre stock.',
+    radiusKm: 10,
+    autoEscalateMinutes: 15,
   },
   {
     level: 2,
-    name: 'Level 2 — Expanded Local Area',
-    description: 'Expanding notification radius to 15 km across active registered volunteer network.',
-    radiusKm: 15,
-    autoEscalateMinutes: 20,
+    name: 'Level 2 — District & Extended Radius',
+    description: 'Expanding notification radius to 25 km across active district network and regional blood storage depots.',
+    radiusKm: 25,
+    autoEscalateMinutes: 25,
   },
   {
     level: 3,
-    name: 'Level 3 — Regional Network Alert',
-    description: 'Broadcasting SMS & web emergency alerts to all registered responders in city region (up to 35 km).',
-    radiusKm: 35,
-    autoEscalateMinutes: 30,
+    name: 'Level 3 — Regional Emergency Mobilization',
+    description: 'Multi-channel emergency alerts dispatched up to 50 km radius. Alerting assigned on-call coordinator.',
+    radiusKm: 50,
+    autoEscalateMinutes: 35,
   },
   {
     level: 4,
-    name: 'Level 4 — Coordinator & Emergency Blood Bank Escalation',
-    description: 'Direct coordinator manual override, blood centre reserve transfer, and emergency dispatch.',
+    name: 'Level 4 — Coordinator Intervention & Central Reserve Release',
+    description: 'Full regional priority mobilization (up to 100 km), coordinator manual override, and hospital emergency liaison.',
     radiusKm: 100,
     autoEscalateMinutes: 0,
   },
@@ -57,13 +57,13 @@ export function evaluateEscalationNeed(
     return {
       shouldEscalate: true,
       nextLevel,
-      reason: `Shortage of ${shortage} unit(s) remaining. Escalating to ${config.name} (${config.radiusKm} km radius).`,
+      reason: `Unresolved shortage of ${shortage} unit(s). Progressively expanding to ${config.name} (${config.radiusKm} km radius).`,
     };
   }
 
   return {
     shouldEscalate: false,
     nextLevel: 4,
-    reason: `Request is already at maximum escalation Level 4. Coordinator control room active.`,
+    reason: `Request is at maximum Level 4 escalation. Direct coordinator intervention active.`,
   };
 }

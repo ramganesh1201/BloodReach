@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { BloodInventoryItem, BloodCentre, BloodGroup, BloodComponent } from '../../types';
 import { getFreshnessStatus } from '../../store/useBloodStore';
-import { Clock, AlertTriangle, ShieldCheck, Plus, Minus, RefreshCw } from 'lucide-react';
+import { Clock, AlertTriangle, ShieldCheck, Plus, Minus, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 interface InventoryTableProps {
   centre: BloodCentre;
@@ -20,7 +20,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   const centreItems = inventory.filter((item) => item.bloodCentreId === centre.id);
 
   let freshnessBadge = (
-    <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-semibold">
+    <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-success-light text-success border border-success-border font-semibold">
       <ShieldCheck className="w-3.5 h-3.5" />
       Verified Fresh ({diffMins}m ago)
     </span>
@@ -28,14 +28,14 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
 
   if (freshness === 'Aging') {
     freshnessBadge = (
-      <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 font-semibold">
+      <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-warning-light text-warning-dark border border-warning-border font-semibold">
         <Clock className="w-3.5 h-3.5" />
         Aging ({diffMins}m ago)
       </span>
     );
   } else if (freshness === 'Stale' || freshness === 'Unknown') {
     freshnessBadge = (
-      <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-red-50 text-red-800 border border-red-300 font-semibold">
+      <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-emergency-light text-emergency border border-emergency-border font-semibold">
         <AlertTriangle className="w-3.5 h-3.5" />
         Outdated (Last verified {Math.floor(diffMins / 60)}h ago)
       </span>
@@ -43,19 +43,19 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-card overflow-hidden">
-      {/* Header */}
-      <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50">
+    <div className="bg-app-surface rounded-xl border border-app-border shadow-card overflow-hidden">
+      {/* Table Header */}
+      <div className="p-4 sm:p-5 border-b border-app-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-app-muted/30">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-bold text-slate-900">{centre.name}</h3>
+            <h3 className="text-base font-bold text-app-text">{centre.name}</h3>
             {centre.verified && (
-              <span className="text-[10px] bg-blue-600 text-white font-bold px-1.5 py-0.5 rounded">
-                Verified Bank
+              <span className="text-[10px] bg-info text-white font-bold px-1.5 py-0.2 rounded-sm">
+                Certified Facility
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-600 mt-0.5">{centre.address} • Phone: {centre.phone}</p>
+          <p className="text-xs text-app-text-secondary mt-0.5">{centre.address} • 24/7 Transfusion Wing</p>
         </div>
 
         <div>{freshnessBadge}</div>
@@ -63,55 +63,61 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
 
       {/* Warning banner if stale */}
       {(freshness === 'Stale' || freshness === 'Unknown') && (
-        <div className="bg-amber-50 border-b border-amber-200 p-3 text-xs text-amber-900 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+        <div className="bg-warning-light border-b border-warning-border p-3 text-xs text-warning-dark flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
           <span>
-            <strong>Availability may be outdated:</strong> Inventory data was last updated more than 2 hours ago. Please update units below to ensure accurate coordination.
+            <strong>Availability may be outdated:</strong> Inventory data was last verified over 2 hours ago. Verify actual physical cold-chain stock before clearance.
           </span>
         </div>
       )}
 
       {/* Inventory Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs text-slate-700">
-          <thead className="bg-slate-100 text-slate-900 uppercase tracking-wider font-semibold border-b border-slate-200">
+        <table className="w-full text-left text-xs text-app-text">
+          <thead className="bg-app-muted text-app-text font-bold uppercase tracking-wider text-[11px] border-b border-app-border">
             <tr>
               <th className="py-3 px-4">Blood Group</th>
               <th className="py-3 px-4">Component</th>
               <th className="py-3 px-4">Available Units</th>
-              <th className="py-3 px-4">Status</th>
+              <th className="py-3 px-4">Stock Category</th>
               <th className="py-3 px-4 text-right">Update Stock</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="divide-y divide-app-border">
             {centreItems.map((item) => {
-              const isLow = item.units <= 1;
+              const isUnavailable = item.units === 0;
+              const isLow = item.units === 1;
+
               return (
-                <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-3 px-4 font-extrabold text-sm text-slate-900">{item.bloodGroup}</td>
-                  <td className="py-3 px-4 font-medium">{item.component}</td>
-                  <td className="py-3 px-4 font-bold text-slate-900 text-sm">
+                <tr key={item.id} className="hover:bg-app-muted/40 transition-colors">
+                  <td className="py-3 px-4 font-bold text-sm text-brand">{item.bloodGroup}</td>
+                  <td className="py-3 px-4 font-medium text-app-text">{item.component}</td>
+                  <td className="py-3 px-4 font-bold text-app-text text-sm">
                     {item.units} unit(s)
                   </td>
                   <td className="py-3 px-4">
-                    {isLow ? (
-                      <span className="text-[11px] font-semibold bg-red-100 text-red-800 px-2 py-0.5 rounded">
-                        Critical Shortage
+                    {isUnavailable ? (
+                      <span className="text-[10px] font-bold bg-app-muted text-app-text-secondary px-2 py-0.5 rounded border border-app-border">
+                        Unavailable (0 Units)
+                      </span>
+                    ) : isLow ? (
+                      <span className="text-[10px] font-bold bg-warning-light text-warning-dark px-2 py-0.5 rounded border border-warning-border">
+                        Critical Shortage (1 Unit)
                       </span>
                     ) : (
-                      <span className="text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
-                        In Reserve
+                      <span className="text-[10px] font-bold bg-success-light text-success px-2 py-0.5 rounded border border-success-border">
+                        Available Stock ({item.units} Units)
                       </span>
                     )}
                   </td>
                   <td className="py-3 px-4 text-right">
-                    <div className="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+                    <div className="inline-flex items-center gap-1 bg-app-muted p-1 rounded-lg border border-app-border">
                       <button
                         type="button"
                         onClick={() =>
                           onUpdateInventory(centre.id, item.bloodGroup, item.component, Math.max(0, item.units - 1))
                         }
-                        className="w-6 h-6 rounded bg-white text-slate-800 hover:bg-slate-200 flex items-center justify-center font-bold"
+                        className="w-6 h-6 rounded bg-app-surface text-app-text hover:bg-app-border flex items-center justify-center font-bold shadow-xs transition-colors"
                         aria-label="Decrease stock"
                       >
                         <Minus className="w-3 h-3" />
@@ -122,7 +128,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                         onClick={() =>
                           onUpdateInventory(centre.id, item.bloodGroup, item.component, item.units + 1)
                         }
-                        className="w-6 h-6 rounded bg-white text-slate-800 hover:bg-slate-200 flex items-center justify-center font-bold"
+                        className="w-6 h-6 rounded bg-app-surface text-app-text hover:bg-app-border flex items-center justify-center font-bold shadow-xs transition-colors"
                         aria-label="Increase stock"
                       >
                         <Plus className="w-3 h-3" />

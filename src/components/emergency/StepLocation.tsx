@@ -25,6 +25,8 @@ interface StepLocationProps {
   hospitalAddress: string;
   city: string;
   district?: string;
+  landmark?: string;
+  hospitalContactPerson?: string;
   state?: string;
   postalCode?: string;
   facilityId?: string;
@@ -37,6 +39,8 @@ interface StepLocationProps {
     hospitalAddress: string;
     city: string;
     district?: string;
+    landmark?: string;
+    hospitalContactPerson?: string;
     state?: string;
     postalCode?: string;
     facilityId?: string;
@@ -69,6 +73,8 @@ export const StepLocation: React.FC<StepLocationProps> = ({
   hospitalAddress,
   city,
   district = '',
+  landmark = '',
+  hospitalContactPerson = '',
   state = 'Andhra Pradesh',
   postalCode = '',
   facilityId = '',
@@ -245,13 +251,41 @@ export const StepLocation: React.FC<StepLocationProps> = ({
               </div>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+                  Location / Landmark (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={landmark}
+                  onChange={(e) => onChange({ landmark: e.target.value })}
+                  placeholder="e.g. Near Main Bus Terminal, Block C"
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+                  Hospital Contact Person (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={hospitalContactPerson}
+                  onChange={(e) => onChange({ hospitalContactPerson: e.target.value })}
+                  placeholder="e.g. Dr. Ramesh / Sister In-Charge"
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white"
+                />
+              </div>
+            </div>
+
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] text-slate-600 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-slate-500 shrink-0" />
                 <span>Source: <strong>{locationSource}</strong></span>
               </div>
               <span className="text-slate-500 italic">
-                Listed from a public healthcare directory. BloodReach has not independently verified this facility.
+                Listed from a public healthcare directory. CareLoop has not independently verified this facility.
               </span>
             </div>
           </div>

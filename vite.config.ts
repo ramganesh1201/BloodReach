@@ -12,7 +12,18 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
-    // Use the boolean true to allow all hosts
-    allowedHosts: true, 
-  }
+    allowedHosts: true,
+  },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          supabase: ['@supabase/supabase-js'],
+          icons: ['lucide-react'],
+        },
+      },
+    },
+  },
 });

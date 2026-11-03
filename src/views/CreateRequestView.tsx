@@ -4,16 +4,17 @@ import { useBloodStore } from '../store/useBloodStore';
 import { BloodGroup, BloodComponent, UrgencyLevel } from '../types';
 import { StepRequirement } from '../components/emergency/StepRequirement';
 import { StepLocation } from '../components/emergency/StepLocation';
-import { StepContact } from '../components/emergency/StepContact';
-import { CheckCircle2 } from 'lucide-react';
+import { StepRequestInfo } from '../components/emergency/StepRequestInfo';
+import { StepReview } from '../components/emergency/StepReview';
+import { Droplet, MapPin, User, CheckCircle2 } from 'lucide-react';
 
 export const CreateRequestView: React.FC = () => {
   const navigate = useNavigate();
   const { createEmergencyRequest } = useBloodStore();
 
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
 
-  // Form State
+  // Guided Form State with Realistic Defaults
   const [formData, setFormData] = useState<{
     bloodGroup: BloodGroup;
     component: BloodComponent;
@@ -21,6 +22,8 @@ export const CreateRequestView: React.FC = () => {
     urgency: UrgencyLevel;
     hospitalName: string;
     hospitalAddress: string;
+    landmark?: string;
+    hospitalContactPerson?: string;
     city: string;
     district?: string;
     state?: string;
@@ -33,6 +36,8 @@ export const CreateRequestView: React.FC = () => {
     contactName: string;
     contactPhone: string;
     preferredContact: 'Phone' | 'SMS' | 'WhatsApp';
+    requiredDateTime?: string;
+    additionalInstructions?: string;
   }>({
     bloodGroup: 'O+',
     component: 'Packed RBC',
@@ -40,6 +45,8 @@ export const CreateRequestView: React.FC = () => {
     urgency: 'Urgent',
     hospitalName: 'Government General Hospital, Machilipatnam',
     hospitalAddress: 'Ramanayyapeta Road, Near Bus Stand',
+    landmark: 'Near District Collectorate Complex',
+    hospitalContactPerson: 'Dr. Ramesh / Duty Medical Officer',
     city: 'Machilipatnam',
     district: 'Krishna',
     state: 'Andhra Pradesh',
@@ -50,8 +57,10 @@ export const CreateRequestView: React.FC = () => {
     locationSource: 'AP Department of Health & Family Welfare',
     locationVerificationStatus: 'source_listed',
     contactName: 'Robert Taylor',
-    contactPhone: '+1 (555) 012-3456',
+    contactPhone: '+91 98490 55123',
     preferredContact: 'Phone',
+    requiredDateTime: '',
+    additionalInstructions: 'Patient in Emergency Trauma Ward 2A. Scheduled for urgent surgery.',
   });
 
   const updateFields = (fields: Partial<typeof formData>) => {
@@ -64,45 +73,90 @@ export const CreateRequestView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4 space-y-6">
-      {/* Progress Stepper Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-subtle">
+    <div className="max-w-3xl mx-auto py-8 px-4 sm:px-6 space-y-6">
+      {/* 4-Step Progress Stepper Bar */}
+      <div className="bg-app-surface p-4 rounded-xl border border-app-border shadow-subtle">
         <div className="flex items-center justify-between">
-          <div className={`flex items-center gap-2 text-xs font-bold ${currentStep >= 1 ? 'text-red-600' : 'text-slate-400'}`}>
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-              currentStep >= 1 ? 'bg-red-600 text-white' : 'bg-slate-200 text-slate-600'
-            }`}>
+          {/* Step 1 */}
+          <button
+            type="button"
+            onClick={() => setCurrentStep(1)}
+            className={`flex items-center gap-2 text-xs font-bold transition-colors ${
+              currentStep >= 1 ? 'text-brand' : 'text-app-text-secondary'
+            }`}
+          >
+            <span
+              className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold transition-all ${
+                currentStep >= 1 ? 'bg-brand text-white' : 'bg-app-muted text-app-text-secondary'
+              }`}
+            >
               1
             </span>
-            <span>Requirement</span>
-          </div>
+            <span className="hidden sm:inline">Requirement</span>
+          </button>
 
-          <div className={`h-0.5 flex-1 mx-3 ${currentStep >= 2 ? 'bg-red-600' : 'bg-slate-200'}`} />
+          <div className={`h-0.5 flex-1 mx-2 sm:mx-3 ${currentStep >= 2 ? 'bg-brand' : 'bg-app-border'}`} />
 
-          <div className={`flex items-center gap-2 text-xs font-bold ${currentStep >= 2 ? 'text-red-600' : 'text-slate-400'}`}>
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-              currentStep >= 2 ? 'bg-red-600 text-white' : 'bg-slate-200 text-slate-600'
-            }`}>
+          {/* Step 2 */}
+          <button
+            type="button"
+            onClick={() => setCurrentStep(2)}
+            className={`flex items-center gap-2 text-xs font-bold transition-colors ${
+              currentStep >= 2 ? 'text-brand' : 'text-app-text-secondary'
+            }`}
+          >
+            <span
+              className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold transition-all ${
+                currentStep >= 2 ? 'bg-brand text-white' : 'bg-app-muted text-app-text-secondary'
+              }`}
+            >
               2
             </span>
-            <span>Location</span>
-          </div>
+            <span className="hidden sm:inline">Hospital</span>
+          </button>
 
-          <div className={`h-0.5 flex-1 mx-3 ${currentStep >= 3 ? 'bg-red-600' : 'bg-slate-200'}`} />
+          <div className={`h-0.5 flex-1 mx-2 sm:mx-3 ${currentStep >= 3 ? 'bg-brand' : 'bg-app-border'}`} />
 
-          <div className={`flex items-center gap-2 text-xs font-bold ${currentStep >= 3 ? 'text-red-600' : 'text-slate-400'}`}>
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-              currentStep >= 3 ? 'bg-red-600 text-white' : 'bg-slate-200 text-slate-600'
-            }`}>
+          {/* Step 3 */}
+          <button
+            type="button"
+            onClick={() => setCurrentStep(3)}
+            className={`flex items-center gap-2 text-xs font-bold transition-colors ${
+              currentStep >= 3 ? 'text-brand' : 'text-app-text-secondary'
+            }`}
+          >
+            <span
+              className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold transition-all ${
+                currentStep >= 3 ? 'bg-brand text-white' : 'bg-app-muted text-app-text-secondary'
+              }`}
+            >
               3
             </span>
-            <span>Contact & Review</span>
+            <span className="hidden sm:inline">Contact</span>
+          </button>
+
+          <div className={`h-0.5 flex-1 mx-2 sm:mx-3 ${currentStep >= 4 ? 'bg-brand' : 'bg-app-border'}`} />
+
+          {/* Step 4 */}
+          <div
+            className={`flex items-center gap-2 text-xs font-bold ${
+              currentStep >= 4 ? 'text-brand' : 'text-app-text-secondary'
+            }`}
+          >
+            <span
+              className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold transition-all ${
+                currentStep >= 4 ? 'bg-brand text-white' : 'bg-app-muted text-app-text-secondary'
+              }`}
+            >
+              4
+            </span>
+            <span className="hidden sm:inline">Review</span>
           </div>
         </div>
       </div>
 
-      {/* Step Components */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-card">
+      {/* Step Components Container */}
+      <div className="bg-app-surface p-6 sm:p-7 rounded-xl border border-app-border shadow-card">
         {currentStep === 1 && (
           <StepRequirement
             bloodGroup={formData.bloodGroup}
@@ -118,6 +172,8 @@ export const CreateRequestView: React.FC = () => {
           <StepLocation
             hospitalName={formData.hospitalName}
             hospitalAddress={formData.hospitalAddress}
+            landmark={formData.landmark}
+            hospitalContactPerson={formData.hospitalContactPerson}
             city={formData.city}
             district={formData.district}
             state={formData.state}
@@ -134,11 +190,24 @@ export const CreateRequestView: React.FC = () => {
         )}
 
         {currentStep === 3 && (
-          <StepContact
-            {...formData}
+          <StepRequestInfo
+            requiredDateTime={formData.requiredDateTime}
+            additionalInstructions={formData.additionalInstructions}
+            contactName={formData.contactName}
+            contactPhone={formData.contactPhone}
+            preferredContact={formData.preferredContact}
             onChange={updateFields}
-            onSubmit={handleSubmit}
+            onNext={() => setCurrentStep(4)}
             onBack={() => setCurrentStep(2)}
+          />
+        )}
+
+        {currentStep === 4 && (
+          <StepReview
+            {...formData}
+            onEditStep={(step) => setCurrentStep(step)}
+            onSubmit={handleSubmit}
+            onBack={() => setCurrentStep(3)}
           />
         )}
       </div>

@@ -4,25 +4,80 @@
 
 @layer base {
   :root {
-    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    /* CareLoop Core Design Tokens */
+    --color-brand: #B42332;
+    --color-brand-dark: #8F1928;
+    --color-emergency: #C62828;
+    --color-success: #16845B;
+    --color-warning: #C58A24;
+    --color-info: #3478B8;
+    --color-text-primary: #202322;
+    --color-text-secondary: #69716F;
+    --color-background: #F8F9F8;
+    --color-surface: #FFFFFF;
+    --color-border: #E6E9E7;
+    --color-muted: #F0F2F0;
+
+    /* Radii */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-pill: 999px;
+
+    /* Transitions */
+    --motion-micro: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --motion-component: 240ms cubic-bezier(0.4, 0, 0.2, 1);
+    --motion-page: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+
+    --font-sans: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   }
   
+  html {
+    scroll-behavior: smooth;
+    text-size-adjust: 100%;
+  }
+
   body {
-    background-color: #F8FAFC;
-    color: #0F172A;
+    background-color: var(--color-background);
+    color: var(--color-text-primary);
     font-family: var(--font-sans);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Accessibility Focus Rings */
+  /* Accessibility Focus Rings (WCAG 2.2 AA) */
   *:focus-visible {
-    outline: 2px solid #DC2626;
+    outline: 2px solid var(--color-brand);
     outline-offset: 2px;
+  }
+
+  /* Headings typography discipline */
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--color-text-primary);
+    font-family: 'Plus Jakarta Sans', var(--font-sans);
+    letter-spacing: -0.015em;
   }
 }
 
-/* Reduced Motion Override */
+/* Restrained animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--motion-component) ease-out forwards;
+}
+
+/* Reduced Motion Override (Accessibility) */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
@@ -34,21 +89,21 @@
   }
 }
 
-/* Custom Scrollbars */
+/* Subtle, refined scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #F1F5F9;
+  background: var(--color-muted);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
-  border-radius: 3px;
+  background: #D3D7D5;
+  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
+  background: #9BA3A1;
 }

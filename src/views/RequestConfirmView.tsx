@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { StatusBadge } from '../components/common/StatusBadge';
-import { CheckCircle2, Share2, Copy, ArrowRight, ShieldCheck, Clock } from 'lucide-react';
+import { CheckCircle2, Copy, ArrowRight, ShieldCheck, Clock, MessageSquare, ArrowLeft, Building2, MapPin } from 'lucide-react';
 
 export const RequestConfirmView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,82 +12,139 @@ export const RequestConfirmView: React.FC = () => {
   const req = requests.find((r) => r.id === id) || requests[0];
 
   const copyReference = () => {
+    if (!req) return;
     navigator.clipboard.writeText(req.referenceCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  if (!req) {
+    return (
+      <div className="max-w-xl mx-auto py-12 px-4 text-center">
+        <p className="text-sm text-app-text-secondary">Request not found.</p>
+        <Link to="/patient" className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-brand hover:underline">
+          <ArrowLeft className="w-3.5 h-3.5" /> Return to Patient Dashboard
+        </Link>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-xl mx-auto py-10 px-4 space-y-6">
-      <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-card text-center space-y-6">
+    <div className="max-w-2xl mx-auto py-10 px-4 sm:px-6 space-y-6">
+      <div className="bg-app-surface rounded-xl border border-app-border p-6 sm:p-8 shadow-card text-center space-y-6">
         {/* Success Icon */}
-        <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto shadow-sm">
+        <div className="w-14 h-14 rounded-full bg-emerald-50 text-success flex items-center justify-center mx-auto border border-emerald-200">
           <CheckCircle2 className="w-8 h-8" />
         </div>
 
-        <div className="space-y-1">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Emergency Request Created
+        <div className="space-y-1.5">
+          <span className="text-caption font-semibold text-success uppercase tracking-wider">
+            Emergency Request Dispatched to Responders
           </span>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight font-mono">
+          <h1 className="text-2xl sm:text-3xl font-bold text-app-text-primary tracking-tight font-mono">
             {req.referenceCode}
           </h1>
-          <p className="text-xs text-slate-600">
-            We are checking nearby resources and coordinating responses across blood centres and registered responders.
+          <p className="text-secondary text-app-text-secondary max-w-md mx-auto">
+            Your emergency request has entered the CareLoop coordination pipeline. Compatible blood banks and verified nearby donors are being notified.
           </p>
         </div>
 
         {/* Details Card */}
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-            <span className="text-xs text-slate-500 font-semibold">Current Status</span>
+        <div className="bg-app-bg p-4 sm:p-5 rounded-lg border border-app-border text-left space-y-4">
+          <div className="flex items-center justify-between border-b border-app-border pb-3">
+            <span className="text-xs text-app-text-secondary font-medium">Lifecycle Stage</span>
             <StatusBadge status={req.status} size="sm" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-2 gap-4 text-xs">
             <div>
-              <span className="text-slate-500 block text-[11px]">Requirement</span>
-              <strong className="text-slate-900 font-bold">{req.bloodGroup} {req.component}</strong>
+              <span className="text-app-text-secondary block text-[11px] mb-0.5">Component & Group</span>
+              <strong className="text-app-text-primary font-bold text-sm">
+                {req.bloodGroup} <span className="text-app-text-secondary font-normal font-sans">({req.component})</span>
+              </strong>
             </div>
             <div>
-              <span className="text-slate-500 block text-[11px]">Units Required</span>
-              <strong className="text-slate-900 font-bold">{req.unitsRequired} unit(s)</strong>
+              <span className="text-app-text-secondary block text-[11px] mb-0.5">Units Required</span>
+              <strong className="text-app-text-primary font-bold text-sm">
+                {req.unitsRequired} unit(s)
+              </strong>
             </div>
             <div>
-              <span className="text-slate-500 block text-[11px]">Hospital</span>
-              <strong className="text-slate-900 truncate block font-bold">{req.hospitalName}</strong>
+              <span className="text-app-text-secondary block text-[11px] mb-0.5">Hospital & Location</span>
+              <div className="flex items-center gap-1 text-app-text-primary font-medium">
+                <Building2 className="w-3.5 h-3.5 text-app-text-secondary shrink-0" />
+                <span className="truncate">{req.hospitalName}</span>
+              </div>
+              <div className="text-[11px] text-app-text-secondary pl-4.5 truncate">
+                {req.district}
+              </div>
             </div>
             <div>
-              <span className="text-slate-500 block text-[11px]">Urgency</span>
-              <strong className="text-red-700 font-bold">{req.urgency}</strong>
+              <span className="text-app-text-secondary block text-[11px] mb-0.5">Urgency Level</span>
+              <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+                req.urgency === 'Critical' ? 'bg-red-50 text-emergency border border-red-200' : 'bg-amber-50 text-warning border border-amber-200'
+              }`}>
+                {req.urgency}
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-900 flex items-center gap-2 border border-blue-200 text-left">
-          <Clock className="w-4 h-4 text-blue-700 shrink-0" />
+        {/* Search Engine Feedback */}
+        <div className="bg-sky-50/80 p-3.5 rounded-lg text-xs text-info flex items-start gap-2.5 border border-sky-200 text-left">
+          <Clock className="w-4 h-4 text-info shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="font-semibold text-sky-950 block">Next Expected Action</span>
+            <p className="text-sky-900 text-[11px] leading-relaxed">
+              Nearby certified donors with compatible antigen profiles ({req.bloodGroup}) are receiving emergency notifications. When a donor accepts, their response will appear here for verification and coordinator assignment.
+            </p>
+          </div>
+        </div>
+
+        {/* Clinical Notice */}
+        <div className="flex items-start gap-2 text-left bg-app-muted p-3 rounded-lg border border-app-border text-[11px] text-app-text-secondary">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
           <span>
-            Resource search in progress: <strong>Shortage engine</strong> & <strong>Potential responder matching</strong> are running.
+            <strong>Safety Protocol:</strong> Blood is not guaranteed until laboratory cross-matching is verified at the hospital transfusion facility.
           </span>
         </div>
 
-        {/* Action Buttons */}
-        <div className="space-y-2 pt-2">
+        {/* Primary Action Buttons */}
+        <div className="space-y-2.5 pt-2">
           <Link
             to={`/request/track/${req.id}`}
-            className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
+            className="w-full bg-brand hover:bg-brand-dark text-white font-medium py-3 px-6 rounded-lg text-xs transition-colors shadow-sm flex items-center justify-center gap-2"
           >
-            Track Emergency Request <ArrowRight className="w-4 h-4" />
+            Open Live Tracking Console <ArrowRight className="w-4 h-4" />
           </Link>
 
-          <button
-            type="button"
-            onClick={copyReference}
-            className="w-full bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-2"
-          >
-            {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
-            {copied ? 'Reference Code Copied!' : 'Share / Copy Reference Code'}
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <Link
+              to={`/communication?requestId=${req.id}`}
+              className="w-full bg-app-surface border border-app-border text-app-text-primary hover:bg-app-muted font-medium py-2.5 px-4 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+            >
+              <MessageSquare className="w-4 h-4 text-app-text-secondary" />
+              Open Communication Hub
+            </Link>
+
+            <button
+              type="button"
+              onClick={copyReference}
+              className="w-full bg-app-surface border border-app-border text-app-text-primary hover:bg-app-muted font-medium py-2.5 px-4 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+            >
+              {copied ? <CheckCircle2 className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4 text-app-text-secondary" />}
+              {copied ? 'Reference Code Copied!' : 'Copy Reference Code'}
+            </button>
+          </div>
+
+          <div className="pt-2 text-center">
+            <Link
+              to="/patient"
+              className="text-xs text-app-text-secondary hover:text-app-text-primary font-medium inline-flex items-center gap-1"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Patient Dashboard
+            </Link>
+          </div>
         </div>
       </div>
     </div>

@@ -6,9 +6,15 @@ import {
   Building2,
   Activity,
   Shield,
-  FlaskConical,
   Users,
-  UserRound
+  UserRound,
+  MessageSquare,
+  History,
+  Layers,
+  FileText,
+  AlertTriangle,
+  User,
+  Settings
 } from 'lucide-react';
 
 export interface NavItem {
@@ -26,92 +32,91 @@ export const DEFAULT_WORKSPACE_BY_ROLE: Record<UserRole, string> = {
   admin: '/admin',
 };
 
-// Backward compatibility alias
 export const ROLE_DEFAULT_ROUTES = DEFAULT_WORKSPACE_BY_ROLE;
 
 export const DESKTOP_NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   patient: [
     { path: '/', label: 'Home', icon: Home, exact: true },
-    { path: '/patient', label: 'Patient Workspace', icon: UserRound },
+    { path: '/patient', label: 'My Requests', icon: UserRound },
     { path: '/request', label: 'Request Blood', icon: Droplet },
-    { path: '/simulation', label: 'Workflow Test', icon: FlaskConical },
+    { path: '/communication', label: 'Communication', icon: MessageSquare },
   ],
   donor: [
     { path: '/', label: 'Home', icon: Home, exact: true },
-    { path: '/donor', label: 'Donor Alerts', icon: Bell },
-    { path: '/simulation', label: 'Workflow Test', icon: FlaskConical },
+    { path: '/donor', label: 'Find Requests', icon: Droplet },
+    { path: '/donor?tab=commitments', label: 'My Commitments', icon: History },
+    { path: '/communication', label: 'Communication', icon: MessageSquare },
   ],
   blood_centre: [
     { path: '/', label: 'Home', icon: Home, exact: true },
-    { path: '/blood-centre', label: 'Inventory & Verification', icon: Building2 },
-    { path: '/simulation', label: 'Workflow Test', icon: FlaskConical },
+    { path: '/blood-centre', label: 'Overview & Inventory', icon: Building2 },
+    { path: '/communication', label: 'Communication', icon: MessageSquare },
   ],
   coordinator: [
     { path: '/', label: 'Home', icon: Home, exact: true },
     { path: '/coordinator', label: 'Control Room', icon: Activity },
     { path: '/blood-centre', label: 'Blood Centres', icon: Building2 },
-    { path: '/simulation', label: 'Workflow Test', icon: FlaskConical },
+    { path: '/communication', label: 'Communication', icon: MessageSquare },
   ],
   admin: [
     { path: '/', label: 'Home', icon: Home, exact: true },
-    { path: '/admin', label: 'System Admin', icon: Shield },
+    { path: '/admin', label: 'Governance & Users', icon: Shield },
     { path: '/coordinator', label: 'Control Room', icon: Activity },
-    { path: '/blood-centre', label: 'Blood Centres', icon: Building2 },
-    { path: '/donor', label: 'Donor Hub', icon: Users },
-    { path: '/simulation', label: 'Workflow Test', icon: FlaskConical },
+    { path: '/blood-centre', label: 'Centres', icon: Building2 },
+    { path: '/communication', label: 'Communication', icon: MessageSquare },
   ],
 };
 
 export const MOBILE_NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   patient: [
     { path: '/', label: 'Home', icon: Home, exact: true },
-    { path: '/patient', label: 'Workspace', icon: UserRound },
+    { path: '/patient', label: 'My Requests', icon: UserRound },
     { path: '/request', label: 'Request', icon: Droplet },
-    { path: '/simulation', label: 'Test', icon: FlaskConical },
+    { path: '/communication', label: 'Messages', icon: MessageSquare },
   ],
   donor: [
     { path: '/', label: 'Home', icon: Home, exact: true },
-    { path: '/donor', label: 'Alerts', icon: Bell },
-    { path: '/simulation', label: 'Test', icon: FlaskConical },
+    { path: '/donor', label: 'Alerts', icon: Droplet },
+    { path: '/communication', label: 'Messages', icon: MessageSquare },
   ],
   blood_centre: [
     { path: '/', label: 'Home', icon: Home, exact: true },
     { path: '/blood-centre', label: 'Inventory', icon: Building2 },
-    { path: '/simulation', label: 'Test', icon: FlaskConical },
+    { path: '/communication', label: 'Messages', icon: MessageSquare },
   ],
   coordinator: [
     { path: '/', label: 'Home', icon: Home, exact: true },
     { path: '/coordinator', label: 'Control', icon: Activity },
     { path: '/blood-centre', label: 'Centres', icon: Building2 },
-    { path: '/simulation', label: 'Test', icon: FlaskConical },
+    { path: '/communication', label: 'Messages', icon: MessageSquare },
   ],
   admin: [
     { path: '/', label: 'Home', icon: Home, exact: true },
     { path: '/admin', label: 'Admin', icon: Shield },
     { path: '/coordinator', label: 'Control', icon: Activity },
-    { path: '/simulation', label: 'Test', icon: FlaskConical },
+    { path: '/communication', label: 'Messages', icon: MessageSquare },
   ],
 };
 
 export const ROLE_ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   '/': ['patient', 'donor', 'blood_centre', 'coordinator', 'admin'],
-  '/patient': ['patient', 'admin'],
+  '/patient': ['patient', 'coordinator', 'admin'],
   '/request': ['patient', 'coordinator', 'admin'],
-  '/donor': ['donor', 'admin'],
+  '/donor': ['donor', 'coordinator', 'admin'],
   '/blood-centre': ['blood_centre', 'coordinator', 'admin'],
   '/coordinator': ['coordinator', 'admin'],
   '/admin': ['admin'],
-  '/simulation': ['patient', 'donor', 'blood_centre', 'coordinator', 'admin'],
+  '/communication': ['patient', 'donor', 'blood_centre', 'coordinator', 'admin'],
 };
 
 export function isRouteAllowedForRole(pathname: string, role: UserRole): boolean {
-  if (pathname === '/' || pathname === '/simulation') return true;
+  if (pathname === '/') return true;
   if (pathname.startsWith('/patient')) return ROLE_ROUTE_PERMISSIONS['/patient'].includes(role);
   if (pathname.startsWith('/request')) return ROLE_ROUTE_PERMISSIONS['/request'].includes(role);
   if (pathname.startsWith('/donor')) return ROLE_ROUTE_PERMISSIONS['/donor'].includes(role);
   if (pathname.startsWith('/blood-centre')) return ROLE_ROUTE_PERMISSIONS['/blood-centre'].includes(role);
   if (pathname.startsWith('/coordinator')) return ROLE_ROUTE_PERMISSIONS['/coordinator'].includes(role);
   if (pathname.startsWith('/admin')) return ROLE_ROUTE_PERMISSIONS['/admin'].includes(role);
+  if (pathname.startsWith('/communication')) return ROLE_ROUTE_PERMISSIONS['/communication'].includes(role);
   return true;
 }
-
