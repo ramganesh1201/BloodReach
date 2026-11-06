@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { EventTimeline } from '../components/emergency/EventTimeline';
 import { getEscalationConfig } from '../services/escalationEngine';
-import { EmergencyStatus } from '../types';
+import { EmergencyStatus, EmergencyRequest } from '../types';
+import { getEmergencyRequestById } from '../services/emergencyRequestService';
 import {
   Building,
   Phone,
@@ -41,8 +42,41 @@ export const TrackRequestView: React.FC = () => {
   const navigate = useNavigate();
   const { requests, events, escalateRequest, isOffline } = useBloodStore();
 
-  const req = requests.find((r) => r.id === id || r.referenceCode.toUpperCase() === id?.toUpperCase()) || requests[0];
+  const localReq = requests.find((r) => r.id === id || r.referenceCode.toUpperCase() === id?.toUpperCase());
+  const [remoteReq, setRemoteReq] = useState<EmergencyRequest | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(!localReq && Boolean(id));
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!localReq && id) {
+      setIsLoading(true);
+      getEmergencyRequestById(id).then((res) => {
+        if (isMounted) {
+          if (res.success && res.data) {
+            setRemoteReq(res.data);
+          }
+          setIsLoading(false);
+        }
+      });
+    } else {
+      setIsLoading(false);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [id, localReq]);
+
+  const req = localReq || remoteReq;
   const reqEvents = events.filter((e) => e.requestId === req?.id);
+
+  if (isLoading) {
+    return (
+      <div className="max-w-md mx-auto py-24 px-4 text-center space-y-4">
+        <RefreshCw className="w-8 h-8 text-brand animate-spin mx-auto" />
+        <p className="text-xs font-semibold text-app-text-secondary">Loading emergency request details...</p>
+      </div>
+    );
+  }
 
   if (!req) {
     return (
@@ -86,7 +120,7 @@ export const TrackRequestView: React.FC = () => {
       case 'SHORTAGE_IDENTIFIED':
         return {
           explanation: `Inventory deficit detected for ${unitsShort} unit(s). The matching engine is preparing multi-channel priority alerts.`,
-          nextAction: `Dispatching SMS and in-app emergency calls to registered ${req.bloodGroup} donors within ${escalationInfo.radiusKm} km.`,
+          nextAction: `Dispatching real-time in-app emergency alerts to registered ${req.bloodGroup} donors within ${escalationInfo.radiusKm} km.`,
         };
       case 'AWAITING_RESPONSE':
       case 'MATCHING_RESPONDERS':

@@ -1,6 +1,6 @@
 import React from 'react';
 import { EmergencyRequest } from '../../types';
-import { MapPin, Building, ShieldCheck, CheckCircle2, XCircle, Clock, Calendar, AlertTriangle } from 'lucide-react';
+import { MapPin, Building, ShieldCheck, CheckCircle2, XCircle, Clock, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { StatusBadge } from '../common/StatusBadge';
 
 interface EmergencyCardProps {
@@ -8,6 +8,8 @@ interface EmergencyCardProps {
   approxDistanceKm?: number;
   hasResponded?: 'ACCEPTED' | 'DECLINED';
   isAssigned?: boolean;
+  isLoading?: boolean;
+  errorMessage?: string | null;
   onRespond: (status: 'ACCEPTED' | 'DECLINED') => void;
 }
 
@@ -16,6 +18,8 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
   approxDistanceKm = 3.2,
   hasResponded,
   isAssigned = false,
+  isLoading = false,
+  errorMessage,
   onRespond,
 }) => {
   return (
@@ -76,6 +80,17 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
         </p>
       </div>
 
+      {/* Error Message Alert */}
+      {errorMessage && (
+        <div className="p-3 rounded-lg text-xs bg-red-50 text-emergency border border-red-200 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            <strong className="block font-semibold">Response Unavailable</strong>
+            <p className="text-[11px] text-red-800 leading-relaxed">{errorMessage}</p>
+          </div>
+        </div>
+      )}
+
       {/* Response Action or Confirmed Status */}
       {isAssigned ? (
         <div className="p-3.5 rounded-lg text-xs bg-success-light border border-success-border text-success-dark space-y-1">
@@ -120,18 +135,29 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
         <div className="grid grid-cols-2 gap-3 pt-1">
           <button
             type="button"
+            disabled={isLoading}
             onClick={() => onRespond('DECLINED')}
-            className="w-full py-2.5 px-4 rounded-lg border border-app-border text-app-text font-bold text-xs hover:bg-app-muted transition-colors"
+            className="w-full py-2.5 px-4 rounded-lg border border-app-border text-app-text font-bold text-xs hover:bg-app-muted disabled:opacity-50 transition-colors"
           >
             Decline
           </button>
           <button
             type="button"
+            disabled={isLoading}
             onClick={() => onRespond('ACCEPTED')}
-            className="w-full py-2.5 px-4 rounded-lg bg-brand hover:bg-brand-dark text-white font-bold text-xs transition-colors shadow-xs flex items-center justify-center gap-1.5"
+            className="w-full py-2.5 px-4 rounded-lg bg-brand hover:bg-brand-dark disabled:opacity-50 text-white font-bold text-xs transition-colors shadow-xs flex items-center justify-center gap-1.5"
           >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Accept Call</span>
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Confirming...</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Accept Call</span>
+              </>
+            )}
           </button>
         </div>
       )}

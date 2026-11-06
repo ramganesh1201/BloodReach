@@ -29,6 +29,7 @@ export interface HealthcareFacility {
   locality?: string;
   address?: string;
   postalCode?: string;
+  emergencyPhone?: string;
   facilityType: FacilityType;
   latitude?: number;
   longitude?: number;
@@ -36,6 +37,8 @@ export interface HealthcareFacility {
   sourceUrl?: string;
   verificationStatus: VerificationStatus;
   lastCheckedAt?: string;
+  dataSource?: 'database' | 'fixture_fallback';
+  isLiveAvailability?: boolean;
 }
 
 export interface DistrictInfo {

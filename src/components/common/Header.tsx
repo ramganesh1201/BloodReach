@@ -34,6 +34,7 @@ export const Header: React.FC = () => {
     currentRole,
     demoExperience,
     authenticatedRole,
+    dataSource,
     currentUser,
     notifications,
     unreadNotificationCount,
@@ -97,6 +98,9 @@ export const Header: React.FC = () => {
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-success/20 text-success-light border border-success/30 uppercase tracking-wider">
                   VERIFIED SESSION
                 </span>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 uppercase tracking-wider">
+                  PostgreSQL Mode
+                </span>
                 <span className="text-white font-semibold text-xs">
                   {currentUser?.fullName || ROLE_DISPLAY_NAMES[authenticatedRole]}
                 </span>
@@ -126,6 +130,9 @@ export const Header: React.FC = () => {
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-warning/20 text-warning-light border border-warning/30 uppercase tracking-wider">
                   ROLE PREVIEW
+                </span>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase tracking-wider">
+                  Demo Fixtures
                 </span>
                 <span className="text-app-muted font-medium text-xs">
                   Active as <strong className="text-white">{ROLE_DISPLAY_NAMES[demoExperience]}</strong>
@@ -163,7 +170,7 @@ export const Header: React.FC = () => {
                     Platform
                   </span>
                 </div>
-                <span className="hidden sm:inline text-[11px] text-app-text-secondary font-medium tracking-wide">
+                <span className="hidden xl:inline text-[11px] text-app-text-secondary font-medium tracking-wide">
                   Emergency Blood Donation & Coordination
                 </span>
               </div>

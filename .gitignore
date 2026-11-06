@@ -31,3 +31,8 @@ dist-ssr/
 # Testing & screenshots
 .playwright-mcp/
 *.png
+
+# Backups & Archives
+_backup_*/
+archive/
+*.zip

@@ -13,6 +13,8 @@ export const CreateRequestView: React.FC = () => {
   const { createEmergencyRequest } = useBloodStore();
 
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Guided Form State with Realistic Defaults
   const [formData, setFormData] = useState<{
@@ -67,9 +69,23 @@ export const CreateRequestView: React.FC = () => {
     setFormData((prev) => ({ ...prev, ...fields }));
   };
 
-  const handleSubmit = () => {
-    const createdReq = createEmergencyRequest(formData);
-    navigate(`/request/confirm/${createdReq.id}`);
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const res = await createEmergencyRequest(formData);
+      if (res.success && res.data) {
+        navigate(`/request/confirm/${res.data.id}`);
+      } else {
+        setSubmitError(res.error || 'Failed to dispatch emergency blood request. Please check details and try again.');
+        setIsSubmitting(false);
+      }
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Network failure while dispatching request.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -208,6 +224,8 @@ export const CreateRequestView: React.FC = () => {
             onEditStep={(step) => setCurrentStep(step)}
             onSubmit={handleSubmit}
             onBack={() => setCurrentStep(3)}
+            isSubmitting={isSubmitting}
+            submitError={submitError}
           />
         )}
       </div>

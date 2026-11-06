@@ -51,7 +51,7 @@ export const HeroChapter: React.FC<HeroChapterProps> = ({
   return (
     <section className="relative overflow-hidden pt-8 pb-16 sm:pt-14 sm:pb-24 border-b border-app-border bg-gradient-to-b from-app-bg to-white">
       {/* Subtle background ambient ring */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[400px] bg-brand/5 blur-3xl rounded-full pointer-events-none -z-10" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-[1000px] h-[400px] bg-brand/5 blur-3xl rounded-full pointer-events-none -z-10" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div

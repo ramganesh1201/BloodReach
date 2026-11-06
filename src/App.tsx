@@ -6,6 +6,7 @@ import { MobileNav } from './components/common/MobileNav';
 import { Footer } from './components/common/Footer';
 import { OfflineBanner } from './components/common/OfflineBanner';
 import { RoleGuard } from './components/common/RoleGuard';
+import { GlobalCallManager } from './components/communication/GlobalCallManager';
 
 // Lazy-loaded Views for optimal initial bundle & performance
 const LandingPage = lazy(() => import('./views/LandingPage').then(m => ({ default: m.LandingPage })));
@@ -30,8 +31,9 @@ export const App: React.FC = () => {
   return (
     <BloodStoreProvider>
       <BrowserRouter>
-        <div className="min-h-screen bg-app-bg text-app-text-primary flex flex-col font-sans selection:bg-brand selection:text-white">
+        <div className="min-h-screen bg-app-bg text-app-text-primary flex flex-col font-sans selection:bg-brand selection:text-white overflow-x-clip">
           <OfflineBanner />
+          <GlobalCallManager />
           <Header />
 
           <main className="flex-grow pb-24 md:pb-12">

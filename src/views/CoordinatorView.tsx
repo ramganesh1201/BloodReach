@@ -52,9 +52,9 @@ export const CoordinatorView: React.FC = () => {
   // Run component-aware clinical matching engine
   const matches = activeReq ? findPotentialResponders(activeReq, donors, 35) : [];
 
-  const handleExecuteAssignment = () => {
+  const handleExecuteAssignment = async () => {
     if (activeReq && assignModalDonorId) {
-      const res = assignDonorToRequest(
+      const res = await assignDonorToRequest(
         activeReq.id,
         assignModalDonorId,
         assignUnits,

@@ -32,8 +32,10 @@ interface StepReviewProps {
   requiredDateTime?: string;
   additionalInstructions?: string;
   onEditStep: (step: 1 | 2 | 3) => void;
-  onSubmit: () => void;
+  onSubmit: () => void | Promise<void>;
   onBack: () => void;
+  isSubmitting?: boolean;
+  submitError?: string | null;
 }
 
 export const StepReview: React.FC<StepReviewProps> = ({
@@ -55,14 +57,22 @@ export const StepReview: React.FC<StepReviewProps> = ({
   onEditStep,
   onSubmit,
   onBack,
+  isSubmitting: externalIsSubmitting,
+  submitError,
 }) => {
   const [confirmedTruthful, setConfirmedTruthful] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [localIsSubmitting, setLocalIsSubmitting] = useState(false);
 
-  const handleConfirmSubmit = () => {
+  const isSubmitting = externalIsSubmitting !== undefined ? externalIsSubmitting : localIsSubmitting;
+
+  const handleConfirmSubmit = async () => {
     if (!confirmedTruthful || isSubmitting) return;
-    setIsSubmitting(true);
-    onSubmit();
+    setLocalIsSubmitting(true);
+    try {
+      await onSubmit();
+    } finally {
+      setLocalIsSubmitting(false);
+    }
   };
 
   return (
@@ -178,6 +188,16 @@ export const StepReview: React.FC<StepReviewProps> = ({
             Submitting this request triggers automated stock cross-referencing across certified blood banks and alerts nearby verified donors. Pathological cross-matching will be completed by hospital staff.
           </p>
         </div>
+
+        {submitError && (
+          <div className="bg-red-50 border border-red-200 text-emergency p-3.5 rounded-lg text-xs flex items-start gap-2.5 animate-shake">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-emergency" />
+            <div className="space-y-0.5">
+              <strong className="block font-bold">Failed to Dispatch Emergency Request</strong>
+              <p className="text-[11px] leading-relaxed text-red-800">{submitError}</p>
+            </div>
+          </div>
+        )}
 
         <label className="flex items-start gap-2.5 pt-2 border-t border-app-border cursor-pointer">
           <input

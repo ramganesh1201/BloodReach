@@ -160,7 +160,7 @@ export interface EscalationConfig {
 }
 
 export type NotificationChannel = 'IN_APP' | 'SMS' | 'PUSH' | 'EMAIL';
-export type NotificationStatus = 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'ACKNOWLEDGED';
+export type NotificationStatus = 'PENDING' | 'QUEUED' | 'ATTEMPTED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'ACKNOWLEDGED';
 
 export interface NotificationPayload {
   id: string;
@@ -287,22 +287,53 @@ export interface CoordinationEvent {
   timestamp: string;
 }
 
-export type CallStatus = 'INITIATING' | 'RINGING' | 'CONNECTED' | 'ENDED' | 'REJECTED' | 'TIMEOUT' | 'FAILED';
+export type CallStatus = 'INITIATING' | 'RINGING' | 'ACCEPTED' | 'CONNECTED' | 'ENDED' | 'REJECTED' | 'TIMEOUT' | 'FAILED';
+
+export type CallConnectionState = 'new' | 'connecting' | 'connected' | 'reconnecting' | 'failed' | 'closed';
 
 export interface CallSession {
   id: string;
   conversationId: string;
+  requestId?: string;
   callerId: string;
   callerName: string;
   callerRole: UserRole;
   receiverId: string;
   receiverName: string;
+  receiverRole?: UserRole;
   callType: 'VOICE' | 'DIALER_FALLBACK';
   status: CallStatus;
   startedAt: string;
+  ringingAt?: string;
+  acceptedAt?: string;
   answeredAt?: string;
+  connectedAt?: string;
   endedAt?: string;
   durationSeconds: number;
+  endReason?: string;
+  metadata?: Record<string, any>;
+}
+
+export type CallEventType =
+  | 'INITIATED'
+  | 'RINGING'
+  | 'ACCEPTED'
+  | 'CONNECTED'
+  | 'MUTED'
+  | 'UNMUTED'
+  | 'RECONNECTED'
+  | 'ENDED'
+  | 'REJECTED'
+  | 'TIMEOUT'
+  | 'FAILED';
+
+export interface CallEvent {
+  id: string;
+  callId: string;
+  eventType: CallEventType;
+  actorId?: string;
+  eventData?: Record<string, any>;
+  createdAt: string;
 }
 
 export type DonorTrackingCardStatus =

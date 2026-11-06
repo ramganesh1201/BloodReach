@@ -1,0 +1,232 @@
+import {
+  HealthcareFacility,
+  DistrictInfo,
+  FacilitySearchOptions,
+  FacilityType,
+} from '../types/healthcareFacility';
+import { ANDHRA_PRADESH_DISTRICTS } from '../data/healthcareFacilities/districts';
+import { ANDHRA_PRADESH_HEALTHCARE_FACILITIES } from '../data/healthcareFacilities/andhraPradesh';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
+
+export interface HealthcareFacilityProvider {
+  searchDistricts(query: string): Promise<DistrictInfo[]>;
+  getCitiesByDistrict(district: string): Promise<string[]>;
+  searchFacilities(options: FacilitySearchOptions): Promise<HealthcareFacility[]>;
+  getFacilityById(id: string): Promise<HealthcareFacility | undefined>;
+}
+
+export const mapDbHospitalToFacility = (row: any): HealthcareFacility => ({
+  id: row.id,
+  name: row.name,
+  normalizedName: row.name.toLowerCase(),
+  state: 'Andhra Pradesh',
+  district: row.district || '',
+  city: row.city,
+  address: row.address,
+  postalCode: row.postal_code,
+  facilityType: (row.facility_type || 'government_hospital') as FacilityType,
+  latitude: row.lat ? Number(row.lat) : undefined,
+  longitude: row.lng ? Number(row.lng) : undefined,
+  source: row.source || 'AP Department of Health & Family Welfare',
+  verificationStatus: row.is_verified ? 'verified' : 'source_listed',
+  lastCheckedAt: row.created_at,
+});
+
+export class SeededAndhraPradeshProvider implements HealthcareFacilityProvider {
+  private districts: DistrictInfo[] = ANDHRA_PRADESH_DISTRICTS;
+  private facilities: HealthcareFacility[] = ANDHRA_PRADESH_HEALTHCARE_FACILITIES;
+
+  async searchDistricts(query: string): Promise<DistrictInfo[]> {
+    const q = query.trim().toLowerCase();
+    if (!q) return this.districts;
+    return this.districts.filter(
+      (d) =>
+        d.name.toLowerCase().includes(q) ||
+        d.headquarters.toLowerCase().includes(q) ||
+        d.region.toLowerCase().includes(q)
+    );
+  }
+
+  async getCitiesByDistrict(districtName: string): Promise<string[]> {
+    const matched = this.facilities.filter(
+      (f) => f.district.toLowerCase() === districtName.trim().toLowerCase()
+    );
+    const citiesSet = new Set<string>();
+    matched.forEach((f) => {
+      if (f.city) citiesSet.add(f.city);
+      if (f.town && f.town !== f.city) citiesSet.add(f.town);
+    });
+    return Array.from(citiesSet).sort();
+  }
+
+  async searchFacilities(options: FacilitySearchOptions): Promise<HealthcareFacility[]> {
+    const { district, city, locality, query, facilityType, limit = 8 } = options;
+    const q = query ? query.trim().toLowerCase() : '';
+
+    let results = this.facilities;
+
+    if (district) {
+      results = results.filter(
+        (f) => f.district.toLowerCase() === district.trim().toLowerCase()
+      );
+    }
+
+    if (city) {
+      results = results.filter(
+        (f) =>
+          f.city?.toLowerCase() === city.trim().toLowerCase() ||
+          f.town?.toLowerCase() === city.trim().toLowerCase()
+      );
+    }
+
+    if (locality) {
+      results = results.filter(
+        (f) => f.locality?.toLowerCase().includes(locality.trim().toLowerCase())
+      );
+    }
+
+    if (facilityType) {
+      results = results.filter((f) => f.facilityType === facilityType);
+    }
+
+    if (q) {
+      results = results.filter(
+        (f) =>
+          f.name.toLowerCase().includes(q) ||
+          f.normalizedName.includes(q) ||
+          (f.city && f.city.toLowerCase().includes(q)) ||
+          (f.locality && f.locality.toLowerCase().includes(q)) ||
+          f.facilityType.toLowerCase().includes(q)
+      );
+    }
+
+    return results.slice(0, limit);
+  }
+
+  async getFacilityById(id: string): Promise<HealthcareFacility | undefined> {
+    return this.facilities.find((f) => f.id === id);
+  }
+}
+
+/**
+ * Supabase-backed Healthcare Facility Provider with automatic graceful fallback
+ * to verified static fixtures. Note: Facility directories provide validated hospital
+ * infrastructure data (location, address, district) and are strictly separated from
+ * live real-time blood inventory.
+ */
+export class SupabaseAndhraPradeshProvider implements HealthcareFacilityProvider {
+  private fallbackProvider = new SeededAndhraPradeshProvider();
+
+  async searchDistricts(query: string): Promise<DistrictInfo[]> {
+    return this.fallbackProvider.searchDistricts(query);
+  }
+
+  async getCitiesByDistrict(districtName: string): Promise<string[]> {
+    if (!isSupabaseConfigured) {
+      return this.fallbackProvider.getCitiesByDistrict(districtName);
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('hospitals')
+        .select('city')
+        .ilike('district', districtName);
+
+      if (!error && data && data.length > 0) {
+        const uniqueCities = Array.from(new Set(data.map((r) => r.city).filter(Boolean))).sort();
+        if (uniqueCities.length > 0) return uniqueCities;
+      }
+    } catch (err) {
+      console.warn('[FacilityProvider] Error querying cities from DB, falling back:', err);
+    }
+
+    return this.fallbackProvider.getCitiesByDistrict(districtName);
+  }
+
+  async searchFacilities(options: FacilitySearchOptions): Promise<HealthcareFacility[]> {
+    if (!isSupabaseConfigured) {
+      return this.fallbackProvider.searchFacilities(options);
+    }
+
+    try {
+      let query = supabase.from('hospitals').select('*');
+
+      if (options.district) {
+        query = query.ilike('district', options.district);
+      }
+      if (options.city) {
+        query = query.ilike('city', options.city);
+      }
+      if (options.facilityType) {
+        query = query.eq('facility_type', options.facilityType);
+      }
+      if (options.query) {
+        query = query.or(`name.ilike.%${options.query}%,city.ilike.%${options.query}%`);
+      }
+
+      const { data, error } = await query.limit(options.limit || 8);
+
+      if (!error && data && data.length > 0) {
+        return data.map(mapDbHospitalToFacility);
+      }
+    } catch (err) {
+      console.warn('[FacilityProvider] Error querying hospitals from DB, falling back:', err);
+    }
+
+    return this.fallbackProvider.searchFacilities(options);
+  }
+
+  async getFacilityById(id: string): Promise<HealthcareFacility | undefined> {
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase
+          .from('hospitals')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (!error && data) {
+          return mapDbHospitalToFacility(data);
+        }
+      } catch (err) {
+        console.warn('[FacilityProvider] Error querying hospital by id, falling back:', err);
+      }
+    }
+
+    return this.fallbackProvider.getFacilityById(id);
+  }
+}
+
+class HealthcareFacilityService {
+  private provider: HealthcareFacilityProvider;
+
+  constructor(provider?: HealthcareFacilityProvider) {
+    this.provider = provider || new SupabaseAndhraPradeshProvider();
+  }
+
+  public setProvider(newProvider: HealthcareFacilityProvider) {
+    this.provider = newProvider;
+  }
+
+  public async getDistricts(query: string = ''): Promise<DistrictInfo[]> {
+    return this.provider.searchDistricts(query);
+  }
+
+  public async searchDistricts(query: string): Promise<DistrictInfo[]> {
+    return this.provider.searchDistricts(query);
+  }
+
+  public async getCitiesByDistrict(district: string): Promise<string[]> {
+    return this.provider.getCitiesByDistrict(district);
+  }
+
+  public async searchFacilities(options: FacilitySearchOptions): Promise<HealthcareFacility[]> {
+    return this.provider.searchFacilities(options);
+  }
+
+  public async getFacilityById(id: string): Promise<HealthcareFacility | undefined> {
+    return this.provider.getFacilityById(id);
+  }
+}
+
+export const healthcareFacilityService = new HealthcareFacilityService();

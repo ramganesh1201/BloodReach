@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   EmergencyRequest,
   EmergencyEvent,
@@ -29,6 +29,9 @@ import {
   CoordinationEventType,
   CallSession,
   CallStatus,
+  CallConnectionState,
+  CallEvent,
+  CallEventType,
   DonorTrackingItem,
   DonorTrackingCardStatus,
 } from '../types';
@@ -38,11 +41,19 @@ import { evaluateEscalationNeed } from '../services/escalationEngine';
 import { notificationService } from '../services/notificationService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { webRtcService } from '../services/webRtcService';
+import { callSignalingService } from '../services/callSignalingService';
+import { ringtoneService } from '../services/ringtoneService';
+import * as emergencyRequestService from '../services/emergencyRequestService';
+import * as donorDiscoveryService from '../services/donorDiscoveryService';
+import * as donorResponseService from '../services/donorResponseService';
+import * as conversationService from '../services/conversationService';
+import * as inventoryService from '../services/inventoryService';
+import * as donorAssignmentService from '../services/donorAssignmentService';
 
 // Seed Initial Verified Healthcare Centres
 const INITIAL_BLOOD_CENTRES: BloodCentre[] = [
   {
-    id: 'bc-1',
+    id: 'a0000000-0000-0000-0000-000000000001',
     name: 'CareLoop Central Blood Depository',
     licenseNumber: 'CL-BB-2024-001',
     address: '45 Health Sciences Avenue, Sector 4',
@@ -58,7 +69,7 @@ const INITIAL_BLOOD_CENTRES: BloodCentre[] = [
     lng: 78.4867,
   },
   {
-    id: 'bc-2',
+    id: 'a0000000-0000-0000-0000-000000000002',
     name: 'Red Cross Regional Blood Centre',
     licenseNumber: 'RC-TS-1088',
     address: '102 LifeLine Corridor, Banjara Hills',
@@ -74,7 +85,7 @@ const INITIAL_BLOOD_CENTRES: BloodCentre[] = [
     lng: 78.4410,
   },
   {
-    id: 'bc-3',
+    id: 'a0000000-0000-0000-0000-000000000003',
     name: 'Apollo Jubilee Emergency Blood Bank',
     licenseNumber: 'AP-TS-9421',
     address: 'Road No. 72, Jubilee Hills',
@@ -93,22 +104,22 @@ const INITIAL_BLOOD_CENTRES: BloodCentre[] = [
 
 // Seed Verified Clinical Stock (Packed RBC, Whole Blood, Platelets, Plasma)
 const INITIAL_INVENTORY: BloodInventoryItem[] = [
-  { id: 'inv-1', bloodCentreId: 'bc-1', bloodGroup: 'A+', component: 'Packed RBC', units: 14, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
-  { id: 'inv-2', bloodCentreId: 'bc-1', bloodGroup: 'B+', component: 'Packed RBC', units: 9, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
-  { id: 'inv-3', bloodCentreId: 'bc-1', bloodGroup: 'O+', component: 'Packed RBC', units: 2, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
-  { id: 'inv-4', bloodCentreId: 'bc-1', bloodGroup: 'O-', component: 'Packed RBC', units: 1, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
-  { id: 'inv-5', bloodCentreId: 'bc-1', bloodGroup: 'AB+', component: 'Plasma', units: 6, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
-  { id: 'inv-6', bloodCentreId: 'bc-1', bloodGroup: 'A+', component: 'Platelets', units: 4, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000001', bloodCentreId: 'a0000000-0000-0000-0000-000000000001', bloodGroup: 'A+', component: 'Packed RBC', units: 14, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000002', bloodCentreId: 'a0000000-0000-0000-0000-000000000001', bloodGroup: 'B+', component: 'Packed RBC', units: 9, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000003', bloodCentreId: 'a0000000-0000-0000-0000-000000000001', bloodGroup: 'O+', component: 'Packed RBC', units: 2, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000004', bloodCentreId: 'a0000000-0000-0000-0000-000000000001', bloodGroup: 'O-', component: 'Packed RBC', units: 1, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000005', bloodCentreId: 'a0000000-0000-0000-0000-000000000001', bloodGroup: 'AB+', component: 'Plasma', units: 6, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000006', bloodCentreId: 'a0000000-0000-0000-0000-000000000001', bloodGroup: 'A+', component: 'Platelets', units: 4, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
   
-  { id: 'inv-7', bloodCentreId: 'bc-2', bloodGroup: 'O+', component: 'Packed RBC', units: 1, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
-  { id: 'inv-8', bloodCentreId: 'bc-2', bloodGroup: 'A-', component: 'Packed RBC', units: 3, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
-  { id: 'inv-9', bloodCentreId: 'bc-2', bloodGroup: 'O+', component: 'Platelets', units: 5, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
-  { id: 'inv-10', bloodCentreId: 'bc-2', bloodGroup: 'B+', component: 'Whole Blood', units: 7, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000007', bloodCentreId: 'a0000000-0000-0000-0000-000000000002', bloodGroup: 'O+', component: 'Packed RBC', units: 1, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000008', bloodCentreId: 'a0000000-0000-0000-0000-000000000002', bloodGroup: 'A-', component: 'Packed RBC', units: 3, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000009', bloodCentreId: 'a0000000-0000-0000-0000-000000000002', bloodGroup: 'O+', component: 'Platelets', units: 5, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000010', bloodCentreId: 'a0000000-0000-0000-0000-000000000002', bloodGroup: 'B+', component: 'Whole Blood', units: 7, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
   
-  { id: 'inv-11', bloodCentreId: 'bc-3', bloodGroup: 'AB+', component: 'Packed RBC', units: 5, updatedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() },
-  { id: 'inv-12', bloodCentreId: 'bc-3', bloodGroup: 'O-', component: 'Packed RBC', units: 0, updatedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() },
-  { id: 'inv-13', bloodCentreId: 'bc-3', bloodGroup: 'O+', component: 'Packed RBC', units: 3, updatedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() },
-  { id: 'inv-14', bloodCentreId: 'bc-3', bloodGroup: 'AB-', component: 'Plasma', units: 4, updatedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000011', bloodCentreId: 'a0000000-0000-0000-0000-000000000003', bloodGroup: 'AB+', component: 'Packed RBC', units: 5, updatedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000012', bloodCentreId: 'a0000000-0000-0000-0000-000000000003', bloodGroup: 'O-', component: 'Packed RBC', units: 0, updatedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000013', bloodCentreId: 'a0000000-0000-0000-0000-000000000003', bloodGroup: 'O+', component: 'Packed RBC', units: 3, updatedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() },
+  { id: 'b0000000-0000-0000-0000-000000000014', bloodCentreId: 'a0000000-0000-0000-0000-000000000003', bloodGroup: 'AB-', component: 'Plasma', units: 4, updatedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() },
 ];
 
 // Seed Verified Donors with clinical eligibility fields
@@ -285,7 +296,7 @@ const INITIAL_EVENTS: EmergencyEvent[] = [
     id: 'evt-4',
     requestId: 'req-8f42',
     eventType: 'RESPONDERS_NOTIFIED',
-    description: 'Level 1 notification: Priority SMS and In-App alerts dispatched to nearby O+ registered donors.',
+    description: 'Level 1 notification: Priority In-App alerts dispatched to nearby O+ registered donors.',
     actorRole: 'Notification Engine',
     timestamp: new Date(Date.now() - 14 * 60 * 1000).toISOString(),
   }
@@ -311,7 +322,7 @@ const INITIAL_MESSAGES: RequestMessage[] = [
     senderId: 'usr-coord',
     senderName: 'Dr. Evelyn Vance',
     senderRole: 'coordinator',
-    content: 'Request validated. Central depository has 1 unit in reserve. Automated SMS & App dispatch active for remaining unit to verified O+ responders.',
+    content: 'Request validated. Central depository has 1 unit in reserve. Real-time In-App dispatch active for remaining unit to verified O+ responders.',
     timestamp: new Date(Date.now() - 14 * 60 * 1000).toISOString(),
     channel: 'IN_APP',
     deliveryStatus: 'READ',
@@ -500,8 +511,14 @@ interface BloodStoreContextType {
   offlineQueue: OfflineQueueItem[];
   isOffline: boolean;
   lastSyncTimestamp: string;
-  syncOfflineQueue: () => void;
+  syncOfflineQueue: () => Promise<void>;
   
+  // Backend & Persistence Mode
+  dataSource: 'database' | 'demo';
+  backendError: string | null;
+  refreshRequests: () => Promise<void>;
+  refreshConversations: () => Promise<void>;
+
   // Auth & Roles
   currentUser: UserProfile | null;
   currentRole: UserRole;
@@ -549,20 +566,20 @@ interface BloodStoreContextType {
     requiredDateTime?: string;
     additionalInstructions?: string;
     notes?: string;
-  }) => EmergencyRequest;
-  cancelEmergencyRequest: (requestId: string, reason: string) => void;
+  }) => Promise<{ success: boolean; data?: EmergencyRequest; error?: string }>;
+  cancelEmergencyRequest: (requestId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   updateRequestStatus: (requestId: string, status: EmergencyRequest['status'], description: string, actorRole?: string) => void;
   
   // Donor Response & Atomic Assignment
-  respondToEmergency: (requestId: string, donorId: string, responseStatus: 'ACCEPTED' | 'DECLINED', channel?: 'WEB' | 'SMS') => void;
-  assignDonorToRequest: (requestId: string, donorId: string, units?: number, coordinatorId?: string, notes?: string) => { success: boolean; message: string };
-  cancelDonorAssignment: (assignmentId: string, reason?: string) => void;
+  respondToEmergency: (requestId: string, donorId: string, responseStatus: 'ACCEPTED' | 'DECLINED', channel?: 'WEB' | 'SMS') => Promise<{ success: boolean; conversationId?: string; error?: string }>;
+  assignDonorToRequest: (requestId: string, donorId: string, units?: number, coordinatorId?: string, notes?: string) => Promise<{ success: boolean; message: string }>;
+  cancelDonorAssignment: (assignmentId: string, reason?: string) => Promise<void>;
   toggleDonorAvailability: (donorId: string) => void;
   setDonorAvailabilityState: (donorId: string, state: DonorAvailabilityState) => void;
   
   // Blood Bank Operations
-  updateInventory: (centreId: string, bloodGroup: BloodGroup, component: BloodComponent, newUnits: number) => void;
-  verifyAndFulfillRequest: (requestId: string, centreId: string, unitsVerified: number) => void;
+  updateInventory: (centreId: string, bloodGroup: BloodGroup, component: BloodComponent, newUnits: number) => Promise<void>;
+  verifyAndFulfillRequest: (requestId: string, centreId: string, unitsVerified: number) => Promise<void>;
   
   // Communication System (Request-Linked Private Channels)
   conversations: Conversation[];
@@ -573,15 +590,23 @@ interface BloodStoreContextType {
   activeCallSession: CallSession | null;
   isCallModalOpen: boolean;
   setActiveConversationId: (id: string | null) => void;
-  acceptRequestAndCreateConversation: (requestId: string, donorId: string) => { success: boolean; conversationId?: string; error?: string };
+  acceptRequestAndCreateConversation: (requestId: string, donorId: string) => Promise<{ success: boolean; conversationId?: string; error?: string }>;
   sendChatMessage: (conversationId: string, content: string, attachments?: MessageAttachment[]) => Promise<{ success: boolean; messageId: string }>;
   markConversationAsRead: (conversationId: string) => void;
   submitCoordinationEvent: (conversationId: string, eventType: CoordinationEventType, eventData?: Record<string, any>) => void;
   initiateCall: (conversationId: string) => Promise<{ success: boolean; session?: CallSession; error?: string }>;
   answerCall: (sessionId: string) => Promise<void>;
-  rejectCall: (sessionId: string) => void;
-  endCall: (sessionId: string) => void;
+  rejectCall: (sessionId: string, reason?: string) => void;
+  cancelCall: (sessionId: string, reason?: string) => void;
+  endCall: (sessionId: string, reason?: string) => void;
   closeCallModal: () => void;
+  audioLevel: number;
+  callConnectionState: 'new' | 'connecting' | 'connected' | 'reconnecting' | 'failed' | 'closed';
+  isMicrophoneMuted: boolean;
+  toggleMicrophoneMute: () => boolean;
+  callError: string | null;
+  setAudioOutputSink: (sinkId: string) => Promise<boolean>;
+  incomingCallSession: CallSession | null;
   getDonorTrackingList: (requestId: string) => DonorTrackingItem[];
   getConversationsForUser: () => Conversation[];
   sendMessage: (requestId: string, content: string, channel?: 'IN_APP' | 'SMS') => Promise<{ success: boolean }>;
@@ -671,6 +696,12 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [callSessions, setCallSessions] = useState<CallSession[]>(INITIAL_CALL_SESSIONS);
   const [activeCallSession, setActiveCallSession] = useState<CallSession | null>(null);
   const [isCallModalOpen, setIsCallModalOpen] = useState<boolean>(false);
+  const [audioLevel, setAudioLevel] = useState<number>(0);
+  const [callConnectionState, setCallConnectionState] = useState<'new' | 'connecting' | 'connected' | 'reconnecting' | 'failed' | 'closed'>('new');
+  const [isMicrophoneMuted, setIsMicrophoneMuted] = useState<boolean>(false);
+  const [callError, setCallError] = useState<string | null>(null);
+  const [incomingCallSession, setIncomingCallSession] = useState<CallSession | null>(null);
+  const callRingingTimeoutRef = useRef<any>(null);
   const [offlineQueue, setOfflineQueue] = useState<OfflineQueueItem[]>([]);
   const [isOffline, setIsOffline] = useState<boolean>(!navigator.onLine);
   const [lastSyncTimestamp, setLastSyncTimestamp] = useState<string>(() => new Date().toISOString());
@@ -702,6 +733,260 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [backendError, setBackendError] = useState<string | null>(null);
+
+  // Persistence / Mode indicator: explicit demo preview vs live database
+  const dataSource: 'database' | 'demo' = demoExperience ? 'demo' : 'database';
+
+  // Authoritative Session & Profile Verification via Supabase Auth
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkSession = async () => {
+      if (!isSupabaseConfigured) return;
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.warn('[CareLoop Auth] Session retrieval error:', sessionError.message);
+          return;
+        }
+
+        if (session?.user && isMounted) {
+          const { data: profileRow } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          if (profileRow && isMounted) {
+            const verifiedRole = profileRow.role as UserRole;
+            const verifiedProfile: UserProfile = {
+              id: profileRow.id,
+              email: profileRow.email || session.user.email || '',
+              fullName: profileRow.full_name || 'CareLoop User',
+              role: verifiedRole,
+              phone: profileRow.phone || '',
+              bloodGroup: profileRow.blood_group,
+              city: profileRow.city || 'Hyderabad',
+              district: profileRow.district,
+              isAvailable: profileRow.is_available ?? true,
+              status: profileRow.status || 'ACTIVE',
+              createdAt: profileRow.created_at,
+              updatedAt: profileRow.updated_at,
+            };
+
+            setCurrentUser(verifiedProfile);
+            setAuthenticatedRole(verifiedRole);
+            setDemoExperience(null);
+            localStorage.setItem('careloop_user_profile', JSON.stringify(verifiedProfile));
+            localStorage.setItem('careloop_auth_role', verifiedRole);
+            sessionStorage.removeItem('careloop_demo_experience');
+            notificationService.initUserSession(session.user.id);
+          }
+        }
+      } catch (err: any) {
+        console.warn('[CareLoop Auth] Session check caught error:', err?.message);
+      }
+    };
+
+    checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
+        try {
+          const { data: profileRow } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          if (profileRow && isMounted) {
+            const verifiedRole = profileRow.role as UserRole;
+            const verifiedProfile: UserProfile = {
+              id: profileRow.id,
+              email: profileRow.email || session.user.email || '',
+              fullName: profileRow.full_name || 'CareLoop User',
+              role: verifiedRole,
+              phone: profileRow.phone || '',
+              bloodGroup: profileRow.blood_group,
+              city: profileRow.city || 'Hyderabad',
+              district: profileRow.district,
+              isAvailable: profileRow.is_available ?? true,
+              status: profileRow.status || 'ACTIVE',
+              createdAt: profileRow.created_at,
+              updatedAt: profileRow.updated_at,
+            };
+
+            setCurrentUser(verifiedProfile);
+            setAuthenticatedRole(verifiedRole);
+            setDemoExperience(null);
+            localStorage.setItem('careloop_user_profile', JSON.stringify(verifiedProfile));
+            localStorage.setItem('careloop_auth_role', verifiedRole);
+            sessionStorage.removeItem('careloop_demo_experience');
+            notificationService.initUserSession(session.user.id);
+          }
+        } catch (err) {
+          console.warn('[CareLoop Auth] Profile sync error:', err);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        if (isMounted) {
+          setCurrentUser(null);
+          setAuthenticatedRole(null);
+          localStorage.removeItem('careloop_auth_role');
+          localStorage.removeItem('careloop_user_profile');
+          notificationService.cleanup();
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription?.unsubscribe();
+    };
+  }, []);
+
+  // Effective Active Role
+  const currentRole: UserRole = authenticatedRole || demoExperience || (currentUser?.role ?? 'patient');
+
+  // Real Database Synchronization
+  const refreshRequests = useCallback(async () => {
+    if (dataSource !== 'database' || !isSupabaseConfigured) return;
+    try {
+      if (currentUser?.id) {
+        if (currentRole === 'donor') {
+          const res = await donorDiscoveryService.getDiscoverableRequests({
+            bloodGroup: currentUser.bloodGroup,
+            city: currentUser.city,
+          });
+          if (res.error) {
+            setBackendError(res.error);
+          } else if (res.data) {
+            setRequests((prev) => {
+              const ids = new Set(res.data!.map((m) => m.id));
+              const retained = prev.filter((p) => !ids.has(p.id));
+              return [...res.data!, ...retained];
+            });
+          }
+        } else {
+          const res = await emergencyRequestService.getMyEmergencyRequests(currentUser.id);
+          if (res.error) {
+            setBackendError(res.error);
+          } else if (res.data) {
+            setRequests(res.data);
+          }
+        }
+      }
+    } catch (err: any) {
+      setBackendError(err?.message || 'Failed to refresh requests');
+    }
+  }, [dataSource, currentUser, currentRole]);
+
+  const refreshConversations = useCallback(async () => {
+    if (dataSource !== 'database' || !isSupabaseConfigured || !currentUser?.id) return;
+    try {
+      const res = await conversationService.getConversationsForUser(currentUser.id);
+      if (res.error) {
+        setBackendError(res.error);
+      } else if (res.data) {
+        setConversations(res.data);
+      }
+    } catch (err: any) {
+      setBackendError(err?.message || 'Failed to refresh conversations');
+    }
+  }, [dataSource, currentUser]);
+
+  const refreshInventory = useCallback(async () => {
+    if (dataSource !== 'database' || !isSupabaseConfigured) return;
+    try {
+      const [centresRes, invRes] = await Promise.all([
+        inventoryService.fetchBloodCentres(),
+        inventoryService.fetchInventory(),
+      ]);
+
+      if (centresRes.data && centresRes.data.length > 0) {
+        setBloodCentres(centresRes.data);
+      }
+      if (invRes.data && invRes.data.length > 0) {
+        setInventory(invRes.data);
+      }
+    } catch (err: any) {
+      console.warn('[CareLoop Store] Failed to refresh inventory from DB:', err?.message);
+    }
+  }, [dataSource]);
+
+  useEffect(() => {
+    if (currentUser?.id && dataSource === 'database') {
+      refreshRequests();
+      refreshConversations();
+      refreshInventory();
+    }
+  }, [currentUser?.id, dataSource, refreshRequests, refreshConversations, refreshInventory]);
+
+  // Realtime Inventory Synchronization
+  useEffect(() => {
+    if (dataSource !== 'database' || !isSupabaseConfigured) return;
+    const unsubscribe = inventoryService.subscribeToInventory((updatedItem) => {
+      setInventory((prev) => {
+        const index = prev.findIndex(
+          (i) =>
+            i.bloodCentreId === updatedItem.bloodCentreId &&
+            i.bloodGroup === updatedItem.bloodGroup &&
+            i.component === updatedItem.component
+        );
+        if (index >= 0) {
+          const next = [...prev];
+          next[index] = updatedItem;
+          return next;
+        }
+        return [...prev, updatedItem];
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [dataSource]);
+
+  // Realtime Chat Message Synchronization for Active Conversation
+  useEffect(() => {
+    if (!activeConversationId || dataSource !== 'database' || !isSupabaseConfigured) return;
+
+    let isMounted = true;
+    conversationService.getConversationMessages(activeConversationId).then((res) => {
+      if (isMounted && res.success && res.data && res.data.length > 0) {
+        setChatMessages((prev) => ({
+          ...prev,
+          [activeConversationId]: res.data!,
+        }));
+      }
+    });
+
+    const unsubscribe = conversationService.subscribeToMessages(activeConversationId, (incomingMsg) => {
+      if (!isMounted) return;
+      setChatMessages((prev) => {
+        const existing = prev[activeConversationId] || [];
+        if (
+          existing.some(
+            (m) =>
+              m.id === incomingMsg.id ||
+              (incomingMsg.clientMessageId && m.clientMessageId === incomingMsg.clientMessageId)
+          )
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [activeConversationId]: [...existing, incomingMsg],
+        };
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [activeConversationId, dataSource]);
 
   // Persist key state to localStorage
   useEffect(() => {
@@ -744,6 +1029,87 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return () => unsubscribe();
   }, []);
 
+  // Cross-Device & Cross-Tab Secure Incoming Call Subscription
+  useEffect(() => {
+    const myId = currentUser?.id || (currentRole === 'donor' ? 'donor-1' : 'usr-patient');
+    if (!myId) return;
+
+    const unsubscribe = callSignalingService.subscribeToUserIncomingCalls(
+      myId,
+      (session: CallSession) => {
+        // Disregard our own outgoing calls
+        if (session.callerId === myId) return;
+
+        // Discard stale calls older than 45 seconds
+        if (session.startedAt) {
+          const elapsed = Date.now() - new Date(session.startedAt).getTime();
+          if (elapsed > 45000) {
+            console.warn('[Call] Discarding stale incoming call:', session.id);
+            return;
+          }
+        }
+
+        // If currently in an active or accepted call, ignore or return busy
+        if (activeCallSession && ['ACCEPTED', 'CONNECTED'].includes(activeCallSession.status)) {
+          console.warn('[Call] Received incoming call while already in call. Busy.');
+          return;
+        }
+
+        console.info('[Call] Remote incoming emergency voice call received:', session);
+        setIncomingCallSession(session);
+        ringtoneService.startIncomingRingtone();
+      },
+      (callId: string, status: string, reason?: string) => {
+        // Remote caller cancelled before answer or call timed out
+        setIncomingCallSession((curr) => {
+          if (curr && curr.id === callId) {
+            ringtoneService.stop();
+            return null;
+          }
+          return curr;
+        });
+
+        // Remote peer ended active call
+        setActiveCallSession((curr) => {
+          if (curr && curr.id === callId) {
+            ringtoneService.playCallEndTone();
+            webRtcService.cleanup();
+            callSignalingService.leaveCallChannel(callId);
+            return {
+              ...curr,
+              status: status as CallStatus,
+              endedAt: new Date().toISOString(),
+              endReason: reason,
+            };
+          }
+          return curr;
+        });
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      ringtoneService.stop();
+      if (callRingingTimeoutRef.current) {
+        clearTimeout(callRingingTimeoutRef.current);
+      }
+    };
+  }, [currentUser, currentRole, activeCallSession]);
+
+  // Cleanup active calls when closing window or navigating away
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (activeCallSession && ['RINGING', 'ACCEPTED', 'CONNECTED'].includes(activeCallSession.status)) {
+        callSignalingService.sendEnded(activeCallSession.id, 'Participant closed browser tab');
+        callSignalingService.leaveCallChannel(activeCallSession.id);
+        webRtcService.cleanup();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [activeCallSession]);
+
   // Online / Offline Listeners & Queue Sync
   useEffect(() => {
     const handleOnline = () => {
@@ -770,21 +1136,90 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [offlineQueue]);
 
   // Attempt to sync offline queue when back online
-  const syncOfflineQueue = useCallback(() => {
+  const syncOfflineQueue = useCallback(async () => {
     if (offlineQueue.length === 0) return;
 
-    setOfflineQueue((prev) =>
-      prev.map((item) => ({ ...item, status: 'CONFIRMED_BY_SERVER' as OfflineSyncState }))
+    const pendingItems = offlineQueue.filter(
+      (item) => item.status === 'SAVED_LOCALLY' || item.status === 'WAITING_FOR_CONNECTION' || item.status === 'FAILED'
     );
+    if (pendingItems.length === 0) return;
 
-    notificationService.sendInAppNotification({
-      title: 'Connectivity Restored',
-      content: `${offlineQueue.length} queued operation(s) verified and synchronized with server.`,
-    });
-  }, [offlineQueue]);
+    let syncedCount = 0;
+    const updatedQueue = [...offlineQueue];
 
-  // Effective Active Role
-  const currentRole: UserRole = authenticatedRole || demoExperience || (currentUser?.role ?? 'patient');
+    for (const item of pendingItems) {
+      try {
+        if (item.action === 'CREATE_REQUEST') {
+          if (isSupabaseConfigured) {
+            const res = await emergencyRequestService.createEmergencyRequest(item.payload, currentUser?.id);
+            const idx = updatedQueue.findIndex((q) => q.id === item.id);
+            if (res.success && res.data) {
+              setRequests((prev) =>
+                prev.map((r) => (r.id === item.payload.id ? res.data! : r))
+              );
+              syncedCount++;
+              if (idx !== -1) {
+                updatedQueue[idx] = { ...updatedQueue[idx], status: 'CONFIRMED_BY_SERVER', lastAttemptAt: new Date().toISOString() };
+              }
+            } else {
+              if (idx !== -1) {
+                updatedQueue[idx] = { ...updatedQueue[idx], status: 'FAILED', error: res.error, lastAttemptAt: new Date().toISOString() };
+              }
+            }
+          } else {
+            syncedCount++;
+            const idx = updatedQueue.findIndex((q) => q.id === item.id);
+            if (idx !== -1) {
+              updatedQueue[idx] = { ...updatedQueue[idx], status: 'CONFIRMED_BY_SERVER', lastAttemptAt: new Date().toISOString() };
+            }
+          }
+        } else if (item.action === 'SEND_MESSAGE') {
+          if (isSupabaseConfigured) {
+            const p = item.payload;
+            const res = await conversationService.sendChatMessage(
+              p.conversationId,
+              p.senderId || currentUser?.id || '',
+              p.senderName || currentUser?.fullName || '',
+              p.senderRole || currentRole,
+              p.content,
+              p.clientMessageId || item.id
+            );
+            const idx = updatedQueue.findIndex((q) => q.id === item.id);
+            if (res.success) {
+              syncedCount++;
+              if (idx !== -1) {
+                updatedQueue[idx] = { ...updatedQueue[idx], status: 'CONFIRMED_BY_SERVER', lastAttemptAt: new Date().toISOString() };
+              }
+            } else {
+              if (idx !== -1) {
+                updatedQueue[idx] = { ...updatedQueue[idx], status: 'FAILED', error: res.error, lastAttemptAt: new Date().toISOString() };
+              }
+            }
+          } else {
+            syncedCount++;
+            const idx = updatedQueue.findIndex((q) => q.id === item.id);
+            if (idx !== -1) {
+              updatedQueue[idx] = { ...updatedQueue[idx], status: 'CONFIRMED_BY_SERVER', lastAttemptAt: new Date().toISOString() };
+            }
+          }
+        }
+      } catch (err: any) {
+        const idx = updatedQueue.findIndex((q) => q.id === item.id);
+        if (idx !== -1) {
+          updatedQueue[idx] = { ...updatedQueue[idx], status: 'FAILED', error: err?.message, lastAttemptAt: new Date().toISOString() };
+        }
+      }
+    }
+
+    setOfflineQueue(updatedQueue);
+
+    if (syncedCount > 0) {
+      notificationService.sendInAppNotification({
+        title: 'Connectivity Restored',
+        content: `${syncedCount} queued operation(s) synchronized with server.`,
+      });
+    }
+  }, [offlineQueue, isSupabaseConfigured, currentUser, currentRole]);
 
   const addEvent = useCallback((requestId: string, eventType: string, description: string, actorRole: string = 'System') => {
     const newEvent: EmergencyEvent = {
@@ -1016,7 +1451,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   // Create Emergency Request with Clinical Validation & Shortage Analysis
-  const createEmergencyRequest = (data: {
+  const createEmergencyRequest = async (data: {
     bloodGroup: BloodGroup;
     component: BloodComponent;
     unitsRequired: number;
@@ -1035,129 +1470,170 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     requiredDateTime?: string;
     additionalInstructions?: string;
     notes?: string;
-  }): EmergencyRequest => {
-    const refCode = `CL-${Math.floor(1000 + Math.random() * 9000).toString(16).toUpperCase()}`;
-    const newReq: EmergencyRequest = {
-      id: `req-${Date.now()}`,
-      referenceCode: refCode,
-      ...data,
-      unitsCoordinated: 0,
-      status: 'CREATED',
-      escalationLevel: 1,
-      assignedDonors: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    // If offline, push to offlineQueue
+  }): Promise<{ success: boolean; data?: EmergencyRequest; error?: string }> => {
+    // If offline, queue locally
     if (isOffline) {
+      const refCode = emergencyRequestService.generateReferenceCode();
+      const offlineReq: EmergencyRequest = {
+        id: `offline-req-${Date.now()}`,
+        referenceCode: refCode,
+        ...data,
+        unitsCoordinated: 0,
+        status: 'CREATED',
+        escalationLevel: 1,
+        assignedDonors: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
       const offlineItem: OfflineQueueItem = {
         id: `offline-${Date.now()}`,
         action: 'CREATE_REQUEST',
-        payload: newReq,
+        payload: offlineReq,
         status: 'SAVED_LOCALLY',
         createdAt: new Date().toISOString(),
       };
       setOfflineQueue((prev) => [offlineItem, ...prev]);
+      setRequests((prev) => [offlineReq, ...prev]);
+      return { success: true, data: offlineReq };
     }
 
-    // 1. Add Request
-    setRequests((prev) => [newReq, ...prev]);
+    if (dataSource === 'demo') {
+      const refCode = emergencyRequestService.generateReferenceCode();
+      const newReq: EmergencyRequest = {
+        id: `req-${Date.now()}`,
+        referenceCode: refCode,
+        ...data,
+        unitsCoordinated: 0,
+        status: 'CREATED',
+        escalationLevel: 1,
+        assignedDonors: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-    // 2. Add Audit Log
-    addEvent(
-      newReq.id,
-      'REQUEST_CREATED',
-      `Emergency request ${refCode} initiated for ${data.unitsRequired} unit(s) of ${data.bloodGroup} ${data.component} at ${data.hospitalName}.`,
-      'Patient Attendant'
-    );
-
-    // 3. Automated Shortage Check & Donor Search Pipeline
-    setTimeout(() => {
-      const shortageResult = detectShortage(newReq, inventory);
-      let unitsFromInventory = 0;
-
-      if (shortageResult.matchingInventoryItems.length > 0) {
-        unitsFromInventory = Math.min(newReq.unitsRequired, shortageResult.unitsInStock);
-      }
-
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === newReq.id
-            ? {
-                ...r,
-                unitsCoordinated: unitsFromInventory,
-                status: shortageResult.hasShortage ? 'SHORTAGE_IDENTIFIED' : 'CHECKING_RESOURCES',
-                updatedAt: new Date().toISOString(),
-              }
-            : r
-        )
-      );
-
+      setRequests((prev) => [newReq, ...prev]);
       addEvent(
         newReq.id,
-        'CHECKING_RESOURCES',
-        `Automated check: ${unitsFromInventory} unit(s) located in verified partner blood centres.`,
-        'Inventory Engine'
+        'REQUEST_CREATED',
+        `Emergency request ${refCode} initiated for ${data.unitsRequired} unit(s) of ${data.bloodGroup} ${data.component} at ${data.hospitalName}.`,
+        'Patient Attendant'
       );
 
-      if (shortageResult.hasShortage) {
-        const unitsShort = newReq.unitsRequired - unitsFromInventory;
-        addEvent(
-          newReq.id,
-          'SHORTAGE_IDENTIFIED',
-          `Deficit of ${unitsShort} unit(s) detected. Triggering Potential Donor Matching Algorithm.`,
-          'Shortage Engine'
-        );
+      // Automated Shortage Check & Donor Search Pipeline for Demo
+      setTimeout(() => {
+        const shortageResult = detectShortage(newReq, inventory);
+        let unitsFromInventory = 0;
 
-        // Find matches
-        const matches = findPotentialResponders(newReq, donors, 25);
-        if (matches.length > 0) {
-          // Dispatch notifications
-          matches.forEach((m) => {
-            notificationService.sendSms(
-              m.donor.phone,
-              notificationService.formatEmergencySms(newReq, unitsShort),
-              newReq.id
-            );
-          });
-
-          setRequests((prev) =>
-            prev.map((r) =>
-              r.id === newReq.id
-                ? { ...r, status: 'AWAITING_RESPONSE', updatedAt: new Date().toISOString() }
-                : r
-            )
-          );
-
-          addEvent(
-            newReq.id,
-            'RESPONDERS_NOTIFIED',
-            `Level 1 escalation: Dispatched rapid alerts to ${matches.length} compatible responder(s).`,
-            'Notification Engine'
-          );
+        if (shortageResult.matchingInventoryItems.length > 0) {
+          unitsFromInventory = Math.min(newReq.unitsRequired, shortageResult.unitsInStock);
         }
-      } else {
+
         setRequests((prev) =>
           prev.map((r) =>
             r.id === newReq.id
-              ? { ...r, status: 'AWAITING_CENTRE_VERIFICATION', updatedAt: new Date().toISOString() }
+              ? {
+                  ...r,
+                  unitsCoordinated: unitsFromInventory,
+                  status: shortageResult.hasShortage ? 'SHORTAGE_IDENTIFIED' : 'CHECKING_RESOURCES',
+                  updatedAt: new Date().toISOString(),
+                }
               : r
           )
         );
+
         addEvent(
           newReq.id,
-          'AWAITING_CENTRE_VERIFICATION',
-          'All required units located in blood bank reserve. Awaiting centre physical verification and issue.',
-          'Coordinator Control'
+          'CHECKING_RESOURCES',
+          `Automated check: ${unitsFromInventory} unit(s) located in verified partner blood centres.`,
+          'Inventory Engine'
         );
-      }
-    }, 400);
 
-    return newReq;
+        if (shortageResult.hasShortage) {
+          const unitsShort = newReq.unitsRequired - unitsFromInventory;
+          addEvent(
+            newReq.id,
+            'SHORTAGE_IDENTIFIED',
+            `Deficit of ${unitsShort} unit(s) detected. Triggering Potential Donor Matching Algorithm.`,
+            'Shortage Engine'
+          );
+
+          // Find matches
+          const matches = findPotentialResponders(newReq, donors, 25);
+          if (matches.length > 0) {
+            matches.forEach((m) => {
+              notificationService.sendSms(
+                m.donor.phone,
+                notificationService.formatEmergencySms(newReq, unitsShort),
+                newReq.id
+              );
+            });
+
+            setRequests((prev) =>
+              prev.map((r) =>
+                r.id === newReq.id
+                  ? { ...r, status: 'AWAITING_RESPONSE', updatedAt: new Date().toISOString() }
+                  : r
+              )
+            );
+
+            addEvent(
+              newReq.id,
+              'RESPONDERS_NOTIFIED',
+              `Level 1 escalation: Dispatched rapid alerts to ${matches.length} compatible responder(s).`,
+              'Notification Engine'
+            );
+          }
+        } else {
+          setRequests((prev) =>
+            prev.map((r) =>
+              r.id === newReq.id
+                ? { ...r, status: 'AWAITING_CENTRE_VERIFICATION', updatedAt: new Date().toISOString() }
+                : r
+            )
+          );
+          addEvent(
+            newReq.id,
+            'AWAITING_CENTRE_VERIFICATION',
+            'All required units located in blood bank reserve. Awaiting centre physical verification and issue.',
+            'Coordinator Control'
+          );
+        }
+      }, 400);
+
+      return { success: true, data: newReq };
+    }
+
+    // Database Mode: Execute actual insertion into Supabase
+    setBackendError(null);
+    const result = await emergencyRequestService.createEmergencyRequest(data, currentUser?.id);
+    if (!result.success || !result.data) {
+      const errorMsg = result.error || 'Failed to persist emergency request to database.';
+      setBackendError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+
+    const created = result.data;
+    setRequests((prev) => [created, ...prev]);
+    addEvent(
+      created.id,
+      'REQUEST_CREATED',
+      `Emergency request ${created.referenceCode} created and stored in clinical registry.`,
+      'Patient Attendant'
+    );
+
+    return { success: true, data: created };
   };
 
-  const cancelEmergencyRequest = (requestId: string, reason: string) => {
+  const cancelEmergencyRequest = async (requestId: string, reason: string): Promise<{ success: boolean; error?: string }> => {
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      setBackendError(null);
+      const res = await emergencyRequestService.cancelEmergencyRequest(requestId, reason);
+      if (!res.success) {
+        setBackendError(res.error || 'Failed to cancel request in database.');
+        return { success: false, error: res.error };
+      }
+    }
+
     setRequests((prev) =>
       prev.map((r) =>
         r.id === requestId
@@ -1178,6 +1654,8 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       content: `Emergency request has been cancelled: ${reason}`,
       requestId,
     });
+
+    return { success: true };
   };
 
   const updateRequestStatus = (
@@ -1193,16 +1671,46 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   // Communication Channel Creation & Atomic Donor Acceptance
-  const acceptRequestAndCreateConversation = useCallback((
+  const acceptRequestAndCreateConversation = useCallback(async (
     requestId: string,
     donorId: string
-  ): { success: boolean; conversationId?: string; error?: string } => {
+  ): Promise<{ success: boolean; conversationId?: string; error?: string }> => {
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      setBackendError(null);
+      const rpcRes = await donorResponseService.acceptRequestAndCreateConversation(requestId, donorId);
+      if (!rpcRes.success) {
+        setBackendError(rpcRes.error || 'Failed to accept emergency request.');
+        return {
+          success: false,
+          error: rpcRes.error || 'Failed to accept emergency request.',
+        };
+      }
+
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.id === requestId
+            ? { ...r, status: 'RESPONDER_FOUND', updatedAt: new Date().toISOString() }
+            : r
+        )
+      );
+
+      if (rpcRes.conversationId) {
+        setActiveConversationId(rpcRes.conversationId);
+        await refreshConversations();
+      }
+
+      return {
+        success: true,
+        conversationId: rpcRes.conversationId,
+      };
+    }
+
+    // Demo Mode execution
     const req = requests.find((r) => r.id === requestId);
     const donor = donors.find((d) => d.id === donorId);
     if (!req) return { success: false, error: 'Emergency request not found' };
     if (!donor) return { success: false, error: 'Donor record not found' };
 
-    // 1. Update or append donor response
     const existingRespIndex = donorResponses.findIndex((r) => r.requestId === requestId && r.donorId === donorId);
     const newResponse: DonorResponse = {
       id: `resp-${Date.now()}-${donorId}`,
@@ -1221,7 +1729,6 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setDonorResponses((prev) => [newResponse, ...prev]);
     }
 
-    // 2. Transition request status to RESPONDER_FOUND
     setRequests((prev) =>
       prev.map((r) =>
         r.id === requestId
@@ -1234,10 +1741,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       )
     );
 
-    // 3. Find or create private request-linked conversation
     const existingConv = conversations.find((c) => c.requestId === requestId && c.donorId === donorId);
-    let convId = existingConv?.id;
-
     const finalConvId: string = existingConv ? existingConv.id : `conv-${requestId}-${donorId}`;
 
     if (!existingConv) {
@@ -1311,24 +1815,29 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     setActiveConversationId(finalConvId);
     return { success: true, conversationId: finalConvId };
-  }, [requests, donors, donorResponses, conversations, addEvent]);
+  }, [dataSource, requests, donors, donorResponses, conversations, addEvent, refreshConversations]);
 
   // Donor Response
-  const respondToEmergency = (
+  const respondToEmergency = async (
     requestId: string,
     donorId: string,
     responseStatus: 'ACCEPTED' | 'DECLINED',
     channel: 'WEB' | 'SMS' = 'WEB'
-  ) => {
+  ): Promise<{ success: boolean; conversationId?: string; error?: string }> => {
     if (responseStatus === 'ACCEPTED') {
-      acceptRequestAndCreateConversation(requestId, donorId);
-      return;
+      return await acceptRequestAndCreateConversation(requestId, donorId);
+    }
+
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      setBackendError(null);
+      const decRes = await donorResponseService.declineRequest(requestId, donorId);
+      if (!decRes.success) {
+        setBackendError(decRes.error || 'Failed to record decline');
+        return { success: false, error: decRes.error };
+      }
     }
 
     const donor = donors.find((d) => d.id === donorId);
-    const req = requests.find((r) => r.id === requestId);
-    if (!req) return;
-
     const newResponse: DonorResponse = {
       id: `resp-${Date.now()}`,
       requestId,
@@ -1348,16 +1857,18 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       `Donor ${donor?.fullName || 'Volunteer'} indicated unavailable via ${channel}.`,
       'Donor Response'
     );
+
+    return { success: true };
   };
 
-  // Atomic Donor Assignment (Safe, conflict-resistant)
-  const assignDonorToRequest = (
+  // Atomic Donor Assignment (Safe, conflict-resistant & DB-backed)
+  const assignDonorToRequest = async (
     requestId: string,
     donorId: string,
     units: number = 1,
     coordinatorId?: string,
     notes?: string
-  ): { success: boolean; message: string } => {
+  ): Promise<{ success: boolean; message: string }> => {
     const req = requests.find((r) => r.id === requestId);
     const donor = donors.find((d) => d.id === donorId);
 
@@ -1375,8 +1886,26 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       };
     }
 
+    let assignmentId = `asgn-${Date.now()}`;
+    // Database atomic procedure when Supabase is configured and authenticated as coordinator/admin
+    if (isSupabaseConfigured && currentUser && ['coordinator', 'admin'].includes(currentRole)) {
+      const dbRes = await donorAssignmentService.assignDonorAtomic({
+        requestId,
+        donorId,
+        units,
+        coordinatorId: currentUser.id,
+      });
+
+      if (!dbRes.success) {
+        return { success: false, message: dbRes.error || 'Assignment rejected by database.' };
+      }
+      if (dbRes.assignmentId) {
+        assignmentId = dbRes.assignmentId;
+      }
+    }
+
     const newAssignment: DonorAssignment = {
-      id: `asgn-${Date.now()}`,
+      id: assignmentId,
       requestId,
       donorId,
       donorName: donor.fullName,
@@ -1393,7 +1922,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const isCoordinatedComplete = newCoordinated >= req.unitsRequired;
 
     // Update assignment list
-    setDonorAssignments((prev) => [newAssignment, ...prev]);
+    setDonorAssignments((prev) => [newAssignment, ...prev.filter((a) => !(a.requestId === requestId && a.donorId === donorId))]);
 
     // Update request
     setRequests((prev) =>
@@ -1403,7 +1932,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               ...r,
               unitsCoordinated: newCoordinated,
               status: isCoordinatedComplete ? 'AWAITING_CENTRE_VERIFICATION' : 'DONOR_ASSIGNED',
-              assignedDonors: [...(r.assignedDonors || []), newAssignment],
+              assignedDonors: [...(r.assignedDonors || []).filter((a) => a.donorId !== donorId), newAssignment],
               updatedAt: new Date().toISOString(),
             }
           : r
@@ -1421,6 +1950,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       title: 'Donor Assignment Confirmed',
       content: `${donor.fullName} (${donor.bloodGroup}) assigned to request ${req.referenceCode}.`,
       requestId,
+      idempotencyKey: `asgn-confirmed:${requestId}:${donorId}`,
     });
 
     notificationService.sendSms(
@@ -1432,9 +1962,16 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return { success: true, message: `Donor ${donor.fullName} successfully assigned.` };
   };
 
-  const cancelDonorAssignment = (assignmentId: string, reason?: string) => {
+  const cancelDonorAssignment = async (assignmentId: string, reason?: string) => {
     const assignment = donorAssignments.find((a) => a.id === assignmentId);
     if (!assignment) return;
+
+    if (isSupabaseConfigured && !assignmentId.startsWith('asgn-')) {
+      await donorAssignmentService.cancelAssignmentAtomic({
+        assignmentId,
+        reason: reason || 'Cancelled by coordinator',
+      });
+    }
 
     setDonorAssignments((prev) =>
       prev.map((a) => (a.id === assignmentId ? { ...a, status: 'CANCELLED', notes: reason } : a))
@@ -1449,7 +1986,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             ? {
                 ...r,
                 unitsCoordinated: newCoordinated,
-                status: 'AWAITING_RESPONSE',
+                status: newCoordinated === 0 ? 'AWAITING_RESPONSE' : 'DONOR_ASSIGNED',
                 updatedAt: new Date().toISOString(),
               }
             : r
@@ -1597,6 +2134,45 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return { success: true, messageId };
     }
 
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      try {
+        const dbRes = await conversationService.sendChatMessage(
+          conversationId,
+          senderId,
+          senderName,
+          senderRole,
+          content,
+          messageId
+        );
+        if (dbRes.success) {
+          setChatMessages((prev) => {
+            const list = prev[conversationId] || [];
+            return {
+              ...prev,
+              [conversationId]: list.map((m) => (m.id === messageId ? { ...m, deliveryStatus: 'DELIVERED' } : m)),
+            };
+          });
+        } else {
+          setChatMessages((prev) => {
+            const list = prev[conversationId] || [];
+            return {
+              ...prev,
+              [conversationId]: list.map((m) => (m.id === messageId ? { ...m, deliveryStatus: 'FAILED' } : m)),
+            };
+          });
+        }
+      } catch (err) {
+        setChatMessages((prev) => {
+          const list = prev[conversationId] || [];
+          return {
+            ...prev,
+            [conversationId]: list.map((m) => (m.id === messageId ? { ...m, deliveryStatus: 'FAILED' } : m)),
+          };
+        });
+      }
+      return { success: true, messageId };
+    }
+
     setTimeout(() => {
       setChatMessages((prev) => {
         const list = prev[conversationId] || [];
@@ -1618,7 +2194,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }, 450);
 
     return { success: true, messageId };
-  }, [conversations, currentRole, currentUser, isOffline]);
+  }, [conversations, currentRole, currentUser, isOffline, dataSource]);
 
   const markConversationAsRead = useCallback((conversationId: string) => {
     setConversations((prev) =>
@@ -1720,96 +2296,379 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   }, [conversations, currentRole, currentUser, addEvent]);
 
-  // Audio Voice Calling (Stage 1 Masked Phone & Stage 2 WebRTC)
+  // Helper to clear ringing timeout
+  const clearCallTimeout = useCallback(() => {
+    if (callRingingTimeoutRef.current) {
+      clearTimeout(callRingingTimeoutRef.current);
+      callRingingTimeoutRef.current = null;
+    }
+  }, []);
+
+  // Safe Supabase RPC Invoker
+  const invokeRpcSafe = useCallback(async (fnName: string, params: Record<string, any>) => {
+    if (!isSupabaseConfigured) return;
+    try {
+      await supabase.rpc(fnName, params);
+    } catch (err) {
+      console.warn(`[Supabase RPC] ${fnName} error:`, err);
+    }
+  }, []);
+
+  // Audio Voice Calling (Stage 1 Masked Phone & Stage 2 Genuine WebRTC + Realtime Signaling)
   const initiateCall = useCallback(async (conversationId: string): Promise<{ success: boolean; session?: CallSession; error?: string }> => {
+    setCallError(null);
+    clearCallTimeout();
+
     const conv = conversations.find((c) => c.id === conversationId);
-    if (!conv) return { success: false, error: 'Conversation not found' };
+    if (!conv) return { success: false, error: 'Conversation channel not found.' };
 
     const callerId = currentUser?.id || (currentRole === 'donor' ? conv.donorId : conv.requesterId);
     const callerName = currentUser?.fullName || (currentRole === 'donor' ? conv.donorName : conv.requesterName);
-    const calleeId = currentRole === 'donor' ? conv.requesterId : conv.donorId;
-    const calleeName = currentRole === 'donor' ? conv.requesterName : conv.donorName;
+    const receiverId = currentRole === 'donor' ? conv.requesterId : conv.donorId;
+    const receiverName = currentRole === 'donor' ? conv.requesterName : conv.donorName;
     const callerRole = currentRole;
 
-    const sessionId = `call-${Date.now()}`;
+    if (activeCallSession && ['RINGING', 'ACCEPTED', 'CONNECTED'].includes(activeCallSession.status)) {
+      setCallError('A call is already active or in progress.');
+      return { success: false, error: 'A call is already active or in progress.' };
+    }
+
+    let sessionId = `call-${Date.now()}`;
+    let configuredIceServers: any[] = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ];
+
+    if (isSupabaseConfigured && currentUser) {
+      try {
+        const { data, error } = await supabase.rpc('initiate_call', {
+          p_conversation_id: conversationId,
+          p_call_type: 'VOICE',
+        });
+        if (error) {
+          console.warn('[Call] RPC initiate_call notice:', error);
+        } else if (data && data.success) {
+          sessionId = data.call_id;
+          if (data.ice_servers) {
+            configuredIceServers = data.ice_servers;
+          }
+        } else if (data && !data.success) {
+          setCallError(data.message || 'Call authorization failed.');
+          return { success: false, error: data.message };
+        }
+      } catch (e: any) {
+        console.warn('[Call] Exception invoking initiate_call RPC:', e);
+      }
+    }
+
+    webRtcService.setIceServers(configuredIceServers);
+
+    // 1. Capture microphone on explicit user action
+    const audioRes = await webRtcService.acquireLocalAudio();
+    if (!audioRes.success) {
+      const errMsg = audioRes.error || 'Microphone access denied. Please allow microphone access in browser settings.';
+      setCallError(errMsg);
+      setIsCallModalOpen(true);
+      return { success: false, error: errMsg };
+    }
+
     const newSession: CallSession = {
       id: sessionId,
       conversationId,
+      requestId: conv.requestId,
       callerId,
       callerName,
       callerRole: currentRole,
-      receiverId: currentRole === 'donor' ? conv.requesterId : conv.donorId,
-      receiverName: currentRole === 'donor' ? conv.requesterName : conv.donorName,
+      receiverId,
+      receiverName,
+      receiverRole: currentRole === 'donor' ? 'patient' : 'donor',
       callType: 'VOICE',
-      status: 'INITIATING',
+      status: 'RINGING',
       startedAt: new Date().toISOString(),
+      ringingAt: new Date().toISOString(),
       durationSeconds: 0,
     };
 
     setActiveCallSession(newSession);
-    setCallSessions((prev) => [newSession, ...prev]);
+    setCallSessions((prev) => [newSession, ...prev.filter((s) => s.id !== sessionId)]);
     setIsCallModalOpen(true);
+    setCallConnectionState('connecting');
 
-    try {
-      await webRtcService.startLocalAudio();
-      await webRtcService.createPeerConnection();
-      await webRtcService.createOffer();
+    // 2. Start audible ringback tone
+    ringtoneService.startOutgoingRingback();
 
-      // Automatically simulate remote answering after 2s for interactive testing/demo
-      setTimeout(() => {
-        setActiveCallSession((curr) => {
-          if (curr && curr.id === sessionId && (curr.status === 'INITIATING' || curr.status === 'RINGING')) {
-            return {
-              ...curr,
-              status: 'CONNECTED',
-              answeredAt: new Date().toISOString(),
-            };
-          }
-          return curr;
-        });
-      }, 2500);
+    // 3. Join signaling channel with receiver-ready handshake
+    callSignalingService.joinCallChannel(sessionId, {
+      onReceiverReady: async ({ calleeId }) => {
+        console.info('[Signaling Caller] Receiver is ready in channel. Generating and dispatching SDP offer for:', calleeId);
+        const offer = await webRtcService.createOffer();
+        if (offer) {
+          await callSignalingService.sendOffer(sessionId, offer, callerId);
+        }
+      },
+      onAnswer: async ({ sdp }) => {
+        console.info('[Signaling Caller] Received remote SDP answer');
+        ringtoneService.stop();
+        clearCallTimeout();
+        await webRtcService.setRemoteDescription(sdp);
+      },
+      onIceCandidate: async ({ candidate }) => {
+        await webRtcService.addIceCandidate(candidate);
+      },
+      onRejected: ({ reason }) => {
+        ringtoneService.playCallEndTone();
+        clearCallTimeout();
+        setActiveCallSession((curr) =>
+          curr && curr.id === sessionId
+            ? { ...curr, status: 'REJECTED', endedAt: new Date().toISOString(), endReason: reason }
+            : curr
+        );
+        setCallConnectionState('closed');
+        webRtcService.cleanup();
+      },
+      onCancelled: ({ reason }) => {
+        ringtoneService.playCallEndTone();
+        clearCallTimeout();
+        setActiveCallSession((curr) =>
+          curr && curr.id === sessionId
+            ? { ...curr, status: 'ENDED', endedAt: new Date().toISOString(), endReason: reason }
+            : curr
+        );
+        setCallConnectionState('closed');
+        webRtcService.cleanup();
+      },
+      onEnded: ({ reason, durationSeconds }) => {
+        ringtoneService.playCallEndTone();
+        clearCallTimeout();
+        setActiveCallSession((curr) =>
+          curr && curr.id === sessionId
+            ? { ...curr, status: 'ENDED', endedAt: new Date().toISOString(), durationSeconds: durationSeconds || 0, endReason: reason }
+            : curr
+        );
+        setCallConnectionState('closed');
+        webRtcService.cleanup();
+      },
+    });
 
-      return { success: true, session: newSession };
-    } catch (err: any) {
-      console.warn('WebRTC audio initialization notification:', err);
-      return { success: true, session: newSession, error: err?.message };
-    }
-  }, [conversations, currentRole, currentUser]);
+    // 4. Initialize peer connection
+    webRtcService.initPeerConnection({
+      onIceCandidate: (candidate) => {
+        callSignalingService.sendIceCandidate(sessionId, candidate, callerId);
+      },
+      onConnectionStateChange: (state) => {
+        console.info(`[Call Caller] WebRTC connection state: ${state}`);
+        const mappedState: CallConnectionState = state === 'disconnected' ? 'reconnecting' : state;
+        setCallConnectionState(mappedState);
+        if (state === 'connected') {
+          ringtoneService.stop();
+          clearCallTimeout();
+          const nowIso = new Date().toISOString();
+          setActiveCallSession((curr) =>
+            curr && curr.id === sessionId
+              ? { ...curr, status: 'CONNECTED', connectedAt: curr.connectedAt || nowIso }
+              : curr
+          );
+          invokeRpcSafe('record_call_connected', { p_call_id: sessionId });
+        } else if (state === 'failed') {
+          setCallError('WebRTC peer connection failed. Network or firewall restriction encountered.');
+        }
+      },
+      onAudioLevel: (level) => {
+        setAudioLevel(level);
+      },
+    });
+
+    // 5. Broadcast incoming call alert to receiver across network & local tabs
+    await callSignalingService.sendIncomingCallAlert(receiverId, newSession);
+
+    // 6. Auto-expire if no answer after 35 seconds
+    callRingingTimeoutRef.current = setTimeout(() => {
+      setActiveCallSession((curr) => {
+        if (curr && curr.id === sessionId && (curr.status === 'INITIATING' || curr.status === 'RINGING')) {
+          ringtoneService.playCallEndTone();
+          webRtcService.cleanup();
+          callSignalingService.sendCancelled(sessionId, 'Call timeout / No answer');
+          callSignalingService.leaveCallChannel(sessionId);
+          invokeRpcSafe('expire_call', { p_call_id: sessionId });
+          return {
+            ...curr,
+            status: 'TIMEOUT',
+            endedAt: new Date().toISOString(),
+            endReason: 'Call timeout (no answer after 35s)',
+          };
+        }
+        return curr;
+      });
+    }, 35000);
+
+    return { success: true, session: newSession };
+  }, [conversations, currentRole, currentUser, activeCallSession, clearCallTimeout, invokeRpcSafe]);
 
   const answerCall = useCallback(async (sessionId: string) => {
-    try {
-      await webRtcService.startLocalAudio();
-      await webRtcService.createPeerConnection();
-      await webRtcService.createAnswer();
-    } catch (e) {
-      console.warn('Answer audio setup notice:', e);
-    }
-    setActiveCallSession((curr) =>
-      curr && curr.id === sessionId
-        ? {
-            ...curr,
-            status: 'CONNECTED',
-            answeredAt: new Date().toISOString(),
-          }
-        : curr
-    );
-  }, []);
+    ringtoneService.stop();
+    clearCallTimeout();
+    setIncomingCallSession(null);
 
-  const rejectCall = useCallback((sessionId: string) => {
+    const targetSession = incomingCallSession?.id === sessionId ? incomingCallSession : activeCallSession;
+    if (!targetSession) return;
+
+    // 1. Capture microphone on explicit user answer
+    const audioRes = await webRtcService.acquireLocalAudio();
+    if (!audioRes.success) {
+      setCallError(audioRes.error || 'Microphone access denied. Cannot answer voice call.');
+      setIsCallModalOpen(true);
+      return;
+    }
+
+    const calleeId = currentUser?.id || (currentRole === 'donor' ? targetSession.receiverId : targetSession.callerId);
+
+    // Initial answered state: ACCEPTED and connecting (NOT CONNECTED until WebRTC establishes)
+    const answeredSession: CallSession = {
+      ...targetSession,
+      status: 'ACCEPTED',
+      answeredAt: new Date().toISOString(),
+      acceptedAt: new Date().toISOString(),
+    };
+
+    setActiveCallSession(answeredSession);
+    setIsCallModalOpen(true);
+    setCallConnectionState('connecting');
+
+    // 2. Obtain ICE servers from backend accept_call RPC
+    let configuredIceServers: any[] = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ];
+
+    if (isSupabaseConfigured) {
+      try {
+        const { data } = await supabase.rpc('accept_call', { p_call_id: sessionId });
+        if (data && data.ice_servers) {
+          configuredIceServers = data.ice_servers;
+        }
+      } catch (e) {
+        console.warn('[Call] Exception invoking accept_call RPC:', e);
+      }
+    }
+
+    webRtcService.setIceServers(configuredIceServers);
+
+    // 3. Initialize peer connection
+    webRtcService.initPeerConnection({
+      onIceCandidate: (candidate) => {
+        callSignalingService.sendIceCandidate(sessionId, candidate, calleeId);
+      },
+      onConnectionStateChange: (state) => {
+        console.info(`[Call Callee] WebRTC connection state: ${state}`);
+        const mappedState: CallConnectionState = state === 'disconnected' ? 'reconnecting' : state;
+        setCallConnectionState(mappedState);
+        if (state === 'connected') {
+          const nowIso = new Date().toISOString();
+          setActiveCallSession((curr) =>
+            curr && curr.id === sessionId
+              ? { ...curr, status: 'CONNECTED', connectedAt: curr.connectedAt || nowIso }
+              : curr
+          );
+          invokeRpcSafe('record_call_connected', { p_call_id: sessionId });
+        } else if (state === 'failed') {
+          setCallError('WebRTC peer connection failed. Network or firewall restriction encountered.');
+        }
+      },
+      onAudioLevel: (level) => {
+        setAudioLevel(level);
+      },
+    });
+
+    // 4. Join signaling channel
+    callSignalingService.joinCallChannel(sessionId, {
+      onOffer: async ({ sdp }) => {
+        console.info('[Signaling Callee] Received remote SDP offer. Applying remote description...');
+        const applied = await webRtcService.setRemoteDescription(sdp);
+        if (applied) {
+          const answer = await webRtcService.createAnswer();
+          if (answer) {
+            console.info('[Signaling Callee] Created SDP answer. Sending to caller...');
+            await callSignalingService.sendAnswer(sessionId, answer, calleeId);
+          }
+        }
+      },
+      onIceCandidate: async ({ candidate }) => {
+        await webRtcService.addIceCandidate(candidate);
+      },
+      onEnded: ({ reason, durationSeconds }) => {
+        ringtoneService.playCallEndTone();
+        setActiveCallSession((curr) =>
+          curr && curr.id === sessionId
+            ? { ...curr, status: 'ENDED', endedAt: new Date().toISOString(), durationSeconds: durationSeconds || 0, endReason: reason }
+            : curr
+        );
+        setCallConnectionState('closed');
+        webRtcService.cleanup();
+      },
+      onCancelled: ({ reason }) => {
+        ringtoneService.playCallEndTone();
+        setActiveCallSession((curr) =>
+          curr && curr.id === sessionId
+            ? { ...curr, status: 'ENDED', endedAt: new Date().toISOString(), endReason: reason }
+            : curr
+        );
+        setCallConnectionState('closed');
+        webRtcService.cleanup();
+      },
+    });
+
+    // 5. Send receiver-ready handshake so caller generates and sends the SDP offer
+    await callSignalingService.sendReceiverReady(sessionId, calleeId);
+  }, [incomingCallSession, activeCallSession, currentRole, currentUser, clearCallTimeout, invokeRpcSafe]);
+
+  const rejectCall = useCallback((sessionId: string, reason: string = 'Declined by recipient') => {
+    ringtoneService.stop();
+    clearCallTimeout();
+    setIncomingCallSession(null);
+
+    callSignalingService.sendRejected(sessionId, reason);
+    callSignalingService.leaveCallChannel(sessionId);
     webRtcService.cleanup();
+
+    invokeRpcSafe('reject_call', { p_call_id: sessionId, p_reason: reason });
+
     setActiveCallSession((curr) =>
-      curr && curr.id === sessionId ? { ...curr, status: 'REJECTED', endedAt: new Date().toISOString() } : curr
+      curr && curr.id === sessionId ? { ...curr, status: 'REJECTED', endedAt: new Date().toISOString(), endReason: reason } : curr
     );
     setIsCallModalOpen(false);
-  }, []);
+  }, [clearCallTimeout, invokeRpcSafe]);
 
-  const endCall = useCallback((sessionId: string) => {
+  const cancelCall = useCallback((sessionId: string, reason: string = 'Cancelled by caller') => {
+    ringtoneService.stop();
+    clearCallTimeout();
+
+    callSignalingService.sendCancelled(sessionId, reason);
+    callSignalingService.leaveCallChannel(sessionId);
     webRtcService.cleanup();
+
+    invokeRpcSafe('cancel_call', { p_call_id: sessionId, p_reason: reason });
+
+    setActiveCallSession((curr) =>
+      curr && curr.id === sessionId ? { ...curr, status: 'ENDED', endedAt: new Date().toISOString(), endReason: reason } : curr
+    );
+    setIsCallModalOpen(false);
+  }, [clearCallTimeout, invokeRpcSafe]);
+
+  const endCall = useCallback((sessionId: string, reason: string = 'Completed normally') => {
+    ringtoneService.playCallEndTone();
+    clearCallTimeout();
+
     const nowIso = new Date().toISOString();
     let durationSec = 0;
-    if (activeCallSession?.answeredAt) {
-      durationSec = Math.max(1, Math.round((new Date(nowIso).getTime() - new Date(activeCallSession.answeredAt).getTime()) / 1000));
+    if (activeCallSession?.connectedAt) {
+      durationSec = Math.max(1, Math.round((new Date(nowIso).getTime() - new Date(activeCallSession.connectedAt).getTime()) / 1000));
     }
+
+    callSignalingService.sendEnded(sessionId, reason, durationSec);
+    callSignalingService.leaveCallChannel(sessionId);
+    webRtcService.cleanup();
+
+    invokeRpcSafe('end_call', { p_call_id: sessionId, p_reason: reason });
 
     setActiveCallSession((curr) =>
       curr && curr.id === sessionId
@@ -1818,6 +2677,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             status: 'ENDED',
             endedAt: nowIso,
             durationSeconds: durationSec,
+            endReason: reason,
           }
         : null
     );
@@ -1831,7 +2691,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         senderName: 'Voice Coordination',
         senderRole: 'system',
         messageType: 'SYSTEM',
-        content: `Call ended (${durationSec > 0 ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s` : 'Call ended'}).`,
+        content: `Voice call completed (${durationSec > 0 ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s` : 'Missed / No connection'}).`,
         timestamp: nowIso,
         deliveryStatus: 'READ',
       };
@@ -1842,15 +2702,25 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
 
     setIsCallModalOpen(false);
-  }, [activeCallSession]);
+  }, [activeCallSession, clearCallTimeout, invokeRpcSafe]);
 
   const closeCallModal = useCallback(() => {
-    if (activeCallSession?.status === 'CONNECTED' || activeCallSession?.status === 'INITIATING' || activeCallSession?.status === 'RINGING') {
-      endCall(activeCallSession.id);
+    if (activeCallSession?.status === 'CONNECTED' || activeCallSession?.status === 'RINGING' || activeCallSession?.status === 'INITIATING') {
+      endCall(activeCallSession.id, 'User closed modal');
     } else {
       setIsCallModalOpen(false);
     }
   }, [activeCallSession, endCall]);
+
+  const toggleMicrophoneMute = useCallback((): boolean => {
+    const muted = webRtcService.toggleMute();
+    setIsMicrophoneMuted(muted);
+    return muted;
+  }, []);
+
+  const setAudioOutputSink = useCallback(async (sinkId: string): Promise<boolean> => {
+    return webRtcService.setAudioOutputDevice(sinkId);
+  }, []);
 
   // Candidate Response & Tracking List for Before-Acceptance View
   const getDonorTrackingList = useCallback((requestId: string): DonorTrackingItem[] => {
@@ -1929,8 +2799,14 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return conversations;
   }, [currentRole, currentUser, conversations, donors, requests]);
 
-  const updateInventory = (centreId: string, bloodGroup: BloodGroup, component: BloodComponent, newUnits: number) => {
+  const updateInventory = async (
+    centreId: string,
+    bloodGroup: BloodGroup,
+    component: BloodComponent,
+    newUnits: number
+  ) => {
     const nowIso = new Date().toISOString();
+    // Optimistic local state update
     setInventory((prev) =>
       prev.map((item) =>
         item.bloodCentreId === centreId && item.bloodGroup === bloodGroup && item.component === component
@@ -1946,16 +2822,51 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     notificationService.sendInAppNotification({
       title: 'Blood Stock Updated',
       content: `Inventory for ${bloodGroup} ${component} updated to ${newUnits} unit(s).`,
+      idempotencyKey: `inv-update:${centreId}:${bloodGroup}:${component}:${newUnits}`,
     });
+
+    // Real Supabase persistence
+    if (isSupabaseConfigured && currentUser && ['coordinator', 'blood_centre', 'admin'].includes(currentRole)) {
+      const res = await inventoryService.setInventoryAtomic({
+        centreId,
+        bloodGroup,
+        component,
+        newUnits,
+        reason: 'Updated via Blood Centre Management Console',
+      });
+
+      if (!res.success) {
+        console.error('[Store] Failed to update inventory in DB:', res.error);
+        setBackendError(res.error || 'Failed to persist inventory change');
+        const refreshed = await inventoryService.fetchInventory(centreId);
+        if (refreshed.data.length > 0) {
+          setInventory((prev) => {
+            const map = new Map(refreshed.data.map((item) => [`${item.bloodCentreId}:${item.bloodGroup}:${item.component}`, item]));
+            return prev.map((item) => map.get(`${item.bloodCentreId}:${item.bloodGroup}:${item.component}`) || item);
+          });
+        }
+      }
+    }
   };
 
-  const verifyAndFulfillRequest = (requestId: string, centreId: string, unitsVerified: number) => {
+  const verifyAndFulfillRequest = async (requestId: string, centreId: string, unitsVerified: number) => {
     const req = requests.find((r) => r.id === requestId);
     const centre = bloodCentres.find((c) => c.id === centreId);
     if (!req) return;
 
     const newCoordinated = Math.min(req.unitsRequired, req.unitsCoordinated + unitsVerified);
     const isFulfilled = newCoordinated >= req.unitsRequired;
+
+    // Deduct verified stock atomically from blood centre inventory if configured
+    if (isSupabaseConfigured && currentUser && ['coordinator', 'blood_centre', 'admin'].includes(currentRole)) {
+      await inventoryService.adjustInventoryAtomic({
+        centreId,
+        bloodGroup: req.bloodGroup,
+        component: req.component,
+        deltaUnits: -unitsVerified,
+        reason: `Clinical issue for emergency request ${req.referenceCode}`,
+      });
+    }
 
     setRequests((prev) =>
       prev.map((r) =>
@@ -1983,6 +2894,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       title: isFulfilled ? 'Emergency Request Fulfilled' : 'Units Verified & Issued',
       content: `Request ${req.referenceCode}: ${unitsVerified} unit(s) clinically verified by ${centre?.name || 'Blood Centre'}.`,
       requestId,
+      idempotencyKey: `verify-fulfill:${requestId}:${unitsVerified}:${isFulfilled}`,
     });
   };
 
@@ -2107,6 +3019,11 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         isOffline,
         lastSyncTimestamp,
         syncOfflineQueue,
+        // Backend & Persistence Mode
+        dataSource,
+        backendError,
+        refreshRequests,
+        refreshConversations,
         currentUser,
         currentRole,
         demoExperience,
@@ -2153,8 +3070,16 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         initiateCall,
         answerCall,
         rejectCall,
+        cancelCall,
         endCall,
         closeCallModal,
+        audioLevel,
+        callConnectionState,
+        isMicrophoneMuted,
+        toggleMicrophoneMute,
+        callError,
+        setAudioOutputSink,
+        incomingCallSession,
         getDonorTrackingList,
         getConversationsForUser,
       }}

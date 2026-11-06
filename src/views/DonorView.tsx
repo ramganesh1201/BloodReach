@@ -34,9 +34,41 @@ export const DonorView: React.FC = () => {
 
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'alerts' | 'commitments' | 'history'>('alerts');
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
 
   // Active donor session
   const activeDonor = donors.find((d) => d.email === currentUser?.email) || donors[0];
+
+  const handleRespond = async (requestId: string, status: 'ACCEPTED' | 'DECLINED') => {
+    setRespondingId(requestId);
+    setCardErrors((prev) => {
+      const next = { ...prev };
+      delete next[requestId];
+      return next;
+    });
+
+    try {
+      const res = await respondToEmergency(requestId, activeDonor.id, status, 'WEB');
+      if (status === 'ACCEPTED') {
+        if (res.success) {
+          navigate('/communication');
+        } else {
+          setCardErrors((prev) => ({
+            ...prev,
+            [requestId]: res.error || 'Failed to accept emergency request.',
+          }));
+        }
+      }
+    } catch (err: any) {
+      setCardErrors((prev) => ({
+        ...prev,
+        [requestId]: err?.message || 'Error responding to emergency request.',
+      }));
+    } finally {
+      setRespondingId(null);
+    }
+  };
 
   // Clinical Eligibility evaluation
   const eligibility = evaluateDonorEligibility(activeDonor, 'Whole Blood');
@@ -131,11 +163,10 @@ export const DonorView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('alerts')}
-            className={`py-2 px-4 rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'alerts'
+            className={`py-2 px-4 rounded-lg transition-all flex items-center gap-1.5 ${activeTab === 'alerts'
                 ? 'bg-brand-light text-brand font-bold shadow-xs'
                 : 'text-app-text-secondary hover:text-app-text'
-            }`}
+              }`}
           >
             <Bell className="w-3.5 h-3.5 text-brand" />
             <span>Emergency Alerts ({activeRequests.length})</span>
@@ -144,11 +175,10 @@ export const DonorView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('commitments')}
-            className={`py-2 px-4 rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'commitments'
+            className={`py-2 px-4 rounded-lg transition-all flex items-center gap-1.5 ${activeTab === 'commitments'
                 ? 'bg-brand-light text-brand font-bold shadow-xs'
                 : 'text-app-text-secondary hover:text-app-text'
-            }`}
+              }`}
           >
             <Activity className="w-3.5 h-3.5 text-success" />
             <span>Active Commitments ({myAssignments.length})</span>
@@ -157,11 +187,10 @@ export const DonorView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('history')}
-            className={`py-2 px-4 rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'history'
+            className={`py-2 px-4 rounded-lg transition-all flex items-center gap-1.5 ${activeTab === 'history'
                 ? 'bg-brand-light text-brand font-bold shadow-xs'
                 : 'text-app-text-secondary hover:text-app-text'
-            }`}
+              }`}
           >
             <Calendar className="w-3.5 h-3.5 text-app-text-secondary" />
             <span>Donation History</span>
@@ -201,7 +230,7 @@ export const DonorView: React.FC = () => {
             <div className="bg-app-surface p-12 rounded-xl border border-app-border text-center text-xs text-app-text-secondary space-y-2 shadow-subtle">
               <Heart className="w-10 h-10 text-success mx-auto" />
               <p className="font-bold text-app-text text-sm">No active emergency calls matching your profile right now.</p>
-              <p>Thank you for staying on standby! You will receive an immediate SMS alert when an urgent call arises in your radius.</p>
+              <p>Thank you for staying on standby! You will receive an immediate in-app emergency alert when an urgent call arises in your radius.</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -219,7 +248,9 @@ export const DonorView: React.FC = () => {
                     approxDistanceKm={activeDonor.approxDistanceKm}
                     hasResponded={hasResponded}
                     isAssigned={isAssigned}
-                    onRespond={(status) => respondToEmergency(req.id, activeDonor.id, status, 'WEB')}
+                    isLoading={respondingId === req.id}
+                    errorMessage={cardErrors[req.id]}
+                    onRespond={(status) => handleRespond(req.id, status)}
                   />
                 );
               })}

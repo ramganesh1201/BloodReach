@@ -6,7 +6,6 @@ import { ChatTimeline } from '../components/communication/ChatTimeline';
 import { MessageComposer } from '../components/communication/MessageComposer';
 import { CoordinationActionPanel } from '../components/communication/CoordinationActionPanel';
 import { ContextPanel } from '../components/communication/ContextPanel';
-import { VoiceCallModal } from '../components/communication/VoiceCallModal';
 import {
   MessageSquare,
   ShieldCheck,
@@ -33,12 +32,6 @@ export const CommunicationView: React.FC = () => {
     markConversationAsRead,
     submitCoordinationEvent,
     initiateCall,
-    answerCall,
-    rejectCall,
-    endCall,
-    closeCallModal,
-    activeCallSession,
-    isCallModalOpen,
     getDonorTrackingList,
     getConversationsForUser,
     acceptRequestAndCreateConversation,
@@ -75,9 +68,9 @@ export const CommunicationView: React.FC = () => {
   }, [activeConversationId, markConversationAsRead]);
 
   // Handle simulating a donor acceptance from the BeforeAcceptance tracker
-  const handleSimulateAcceptance = (donorId: string) => {
+  const handleSimulateAcceptance = async (donorId: string) => {
     if (!activeRequest) return;
-    const res = acceptRequestAndCreateConversation(activeRequest.id, donorId);
+    const res = await acceptRequestAndCreateConversation(activeRequest.id, donorId);
     if (res.success && res.conversationId) {
       setActiveConversationId(res.conversationId);
       setMobileTab('chat');
@@ -342,18 +335,6 @@ export const CommunicationView: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* 3. In-App WebRTC Audio Calling & Native Phone Dialer Modal */}
-      <VoiceCallModal
-        session={activeCallSession}
-        isOpen={isCallModalOpen}
-        currentRole={currentRole}
-        onAnswer={answerCall}
-        onReject={rejectCall}
-        onEnd={endCall}
-        onClose={closeCallModal}
-        fallbackPhoneNumber={activeConversation?.donorPhone || activeConversation?.requesterPhone || '+91 98490 55123'}
-      />
     </div>
   );
 };
