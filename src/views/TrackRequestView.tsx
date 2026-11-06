@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { EventTimeline } from '../components/emergency/EventTimeline';
@@ -39,6 +39,8 @@ const LIFECYCLE_STEPS: { id: number; key: string; label: string; statusMatch: Em
 
 export const TrackRequestView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token') || undefined;
   const navigate = useNavigate();
   const { requests, events, escalateRequest, isOffline } = useBloodStore();
 
@@ -50,7 +52,7 @@ export const TrackRequestView: React.FC = () => {
     let isMounted = true;
     if (!localReq && id) {
       setIsLoading(true);
-      getEmergencyRequestById(id).then((res) => {
+      getEmergencyRequestById(id, token).then((res) => {
         if (isMounted) {
           if (res.success && res.data) {
             setRemoteReq(res.data);
@@ -64,7 +66,7 @@ export const TrackRequestView: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [id, localReq]);
+  }, [id, localReq, token]);
 
   const req = localReq || remoteReq;
   const reqEvents = events.filter((e) => e.requestId === req?.id);

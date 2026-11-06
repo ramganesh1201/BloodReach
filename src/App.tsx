@@ -72,7 +72,7 @@ export const App: React.FC = () => {
                 <Route
                   path="/request/track"
                   element={
-                    <RoleGuard allowedRoles={['patient', 'coordinator', 'admin']}>
+                    <RoleGuard allowedRoles={['patient', 'donor', 'blood_centre', 'coordinator', 'admin']}>
                       <TrackRequestView />
                     </RoleGuard>
                   }
@@ -80,7 +80,7 @@ export const App: React.FC = () => {
                 <Route
                   path="/request/track/:id"
                   element={
-                    <RoleGuard allowedRoles={['patient', 'coordinator', 'admin']}>
+                    <RoleGuard allowedRoles={['patient', 'donor', 'blood_centre', 'coordinator', 'admin']}>
                       <TrackRequestView />
                     </RoleGuard>
                   }

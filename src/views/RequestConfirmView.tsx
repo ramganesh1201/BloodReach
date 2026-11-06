@@ -112,7 +112,7 @@ export const RequestConfirmView: React.FC = () => {
         {/* Primary Action Buttons */}
         <div className="space-y-2.5 pt-2">
           <Link
-            to={`/request/track/${req.id}`}
+            to={`/request/track/${req.id}${req.trackingToken ? `?token=${req.trackingToken}` : ''}`}
             className="w-full bg-brand hover:bg-brand-dark text-white font-medium py-3 px-6 rounded-lg text-xs transition-colors shadow-sm flex items-center justify-center gap-2"
           >
             Open Live Tracking Console <ArrowRight className="w-4 h-4" />

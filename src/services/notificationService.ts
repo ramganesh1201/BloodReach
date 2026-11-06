@@ -250,17 +250,10 @@ class NotificationService {
     );
     this.emit();
 
-    if (isSupabaseConfigured && id && !id.startsWith('notif-seed') && !id.startsWith('notif-app') && !id.startsWith('notif-sms')) {
-      Promise.resolve(
-        supabase.rpc('update_notification_delivery_status', {
-          p_notification_id: id,
-          p_status: status,
-          p_error: error || null,
-        })
-      ).catch((err: any) => {
-        console.warn('[NotificationService] Failed to update delivery status in DB:', err);
-      });
-    }
+    // Note: Database delivery status updates (SENT, DELIVERED, FAILED) are strictly
+    // performed by backend delivery dispatchers/workers via the service_role key.
+    // Client browsers must not invoke service_role-restricted RPC update_notification_delivery_status.
+    // User read/acknowledged state is handled separately via acknowledgeNotification.
   }
 
   // Mark notification as acknowledged / read

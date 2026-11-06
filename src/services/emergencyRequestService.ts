@@ -43,12 +43,21 @@ const VALID_URGENCIES: UrgencyLevel[] = ['Today', 'Urgent', 'Critical'];
 
 /**
  * Generate a unique, clinical reference code (e.g., CL-8F42)
+ * Uses cryptographically secure random entropy via crypto.getRandomValues
  */
 export function generateReferenceCode(): string {
   const chars = '0123456789ABCDEF';
   let suffix = '';
-  for (let i = 0; i < 4; i++) {
-    suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const bytes = new Uint8Array(4);
+    crypto.getRandomValues(bytes);
+    for (let i = 0; i < 4; i++) {
+      suffix += chars.charAt(bytes[i] % chars.length);
+    }
+  } else {
+    for (let i = 0; i < 4; i++) {
+      suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
   }
   return `CL-${suffix}`;
 }
@@ -115,6 +124,7 @@ export function mapDbToEmergencyRequest(row: any): EmergencyRequest {
     createdBy: row.created_by ?? undefined,
     cancellationReason: row.cancellation_reason ?? undefined,
     notes: row.notes ?? undefined,
+    trackingToken: row.tracking_token ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -132,9 +142,12 @@ export async function createEmergencyRequest(
     return { success: false, error: validation.error };
   }
 
+  const requestId = crypto.randomUUID();
   const referenceCode = generateReferenceCode();
+  const trackingToken = crypto.randomUUID();
 
   const insertPayload = {
+    id: requestId,
     reference_code: referenceCode,
     blood_group: data.bloodGroup,
     component: data.component,
@@ -156,7 +169,153 @@ export async function createEmergencyRequest(
     escalation_level: 1,
     created_by: userId || null,
     notes: data.notes || data.additionalInstructions || null,
+    tracking_token: trackingToken,
   };
+
+  // 1. For guest submissions, invoke atomic submit_guest_emergency_request RPC to guarantee DB commit
+  if (!userId) {
+    try {
+      const { data: rpcRes, error: rpcError } = await supabase.rpc('submit_guest_emergency_request', {
+        p_id: requestId,
+        p_reference_code: referenceCode,
+        p_blood_group: data.bloodGroup,
+        p_component: data.component,
+        p_units_required: data.unitsRequired,
+        p_urgency: data.urgency,
+        p_hospital_name: data.hospitalName.trim(),
+        p_hospital_address: data.hospitalAddress.trim(),
+        p_city: data.city.trim(),
+        p_district: data.district?.trim() || null,
+        p_state: data.state?.trim() || 'Andhra Pradesh',
+        p_postal_code: data.postalCode?.trim() || null,
+        p_lat: data.latitude ?? null,
+        p_lng: data.longitude ?? null,
+        p_contact_name: data.contactName.trim(),
+        p_contact_phone: data.contactPhone.trim(),
+        p_contact_method: data.preferredContact,
+        p_notes: data.notes || data.additionalInstructions || null,
+        p_tracking_token: trackingToken,
+      });
+
+      if (!rpcError && rpcRes && rpcRes.success) {
+        const assignedToken = rpcRes.tracking_token || trackingToken;
+        if (typeof localStorage !== 'undefined') {
+          try {
+            localStorage.setItem(`careloop_tracking_token_${rpcRes.id || requestId}`, assignedToken);
+          } catch {
+            // Storage quota or restricted context
+          }
+        }
+        return {
+          success: true,
+          data: {
+            id: rpcRes.id || requestId,
+            referenceCode: rpcRes.reference_code || referenceCode,
+            bloodGroup: data.bloodGroup,
+            component: data.component,
+            unitsRequired: data.unitsRequired,
+            unitsCoordinated: 0,
+            urgency: data.urgency,
+            hospitalName: data.hospitalName.trim(),
+            hospitalAddress: data.hospitalAddress.trim(),
+            city: data.city.trim(),
+            district: data.district?.trim() || undefined,
+            state: data.state?.trim() || 'Andhra Pradesh',
+            postalCode: data.postalCode?.trim() || undefined,
+            lat: data.latitude ?? undefined,
+            lng: data.longitude ?? undefined,
+            contactName: data.contactName.trim(),
+            contactPhone: data.contactPhone.trim(),
+            preferredContact: data.preferredContact,
+            status: 'CREATED',
+            escalationLevel: 1,
+            createdBy: undefined,
+            cancellationReason: undefined,
+            notes: data.notes || data.additionalInstructions || undefined,
+            trackingToken: assignedToken,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        };
+      }
+
+      if (rpcRes?.collision) {
+        // Retry once with fresh reference code
+        const retryCode = generateReferenceCode();
+        const retryId = crypto.randomUUID();
+        const retryToken = crypto.randomUUID();
+        const { data: retryRes, error: retryError } = await supabase.rpc('submit_guest_emergency_request', {
+          p_id: retryId,
+          p_reference_code: retryCode,
+          p_blood_group: data.bloodGroup,
+          p_component: data.component,
+          p_units_required: data.unitsRequired,
+          p_urgency: data.urgency,
+          p_hospital_name: data.hospitalName.trim(),
+          p_hospital_address: data.hospitalAddress.trim(),
+          p_city: data.city.trim(),
+          p_district: data.district?.trim() || null,
+          p_state: data.state?.trim() || 'Andhra Pradesh',
+          p_postal_code: data.postalCode?.trim() || null,
+          p_lat: data.latitude ?? null,
+          p_lng: data.longitude ?? null,
+          p_contact_name: data.contactName.trim(),
+          p_contact_phone: data.contactPhone.trim(),
+          p_contact_method: data.preferredContact,
+          p_notes: data.notes || data.additionalInstructions || null,
+          p_tracking_token: retryToken,
+        });
+
+        if (!retryError && retryRes && retryRes.success) {
+          const assignedRetryToken = retryRes.tracking_token || retryToken;
+          if (typeof localStorage !== 'undefined') {
+            try {
+              localStorage.setItem(`careloop_tracking_token_${retryRes.id || retryId}`, assignedRetryToken);
+            } catch {
+              // Storage quota or restricted context
+            }
+          }
+          return {
+            success: true,
+            data: {
+              id: retryRes.id || retryId,
+              referenceCode: retryRes.reference_code || retryCode,
+              bloodGroup: data.bloodGroup,
+              component: data.component,
+              unitsRequired: data.unitsRequired,
+              unitsCoordinated: 0,
+              urgency: data.urgency,
+              hospitalName: data.hospitalName.trim(),
+              hospitalAddress: data.hospitalAddress.trim(),
+              city: data.city.trim(),
+              district: data.district?.trim() || undefined,
+              state: data.state?.trim() || 'Andhra Pradesh',
+              postalCode: data.postalCode?.trim() || undefined,
+              lat: data.latitude ?? undefined,
+              lng: data.longitude ?? undefined,
+              contactName: data.contactName.trim(),
+              contactPhone: data.contactPhone.trim(),
+              preferredContact: data.preferredContact,
+              status: 'CREATED',
+              escalationLevel: 1,
+              createdBy: undefined,
+              cancellationReason: undefined,
+              notes: data.notes || data.additionalInstructions || undefined,
+              trackingToken: assignedRetryToken,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          };
+        }
+      }
+
+      if (rpcRes && !rpcRes.success && rpcRes.error) {
+        return { success: false, error: rpcRes.error };
+      }
+    } catch {
+      // Fall through to direct table insert if RPC is unavailable in older schema/mock environments
+    }
+  }
 
   try {
     const { data: inserted, error } = await supabase
@@ -177,9 +336,78 @@ export async function createEmergencyRequest(
           .single();
 
         if (retryError) {
+          if (retryError.code === 'PGRST116' || retryError.message?.includes('JSON object requested')) {
+            return {
+              success: true,
+              data: {
+                id: requestId,
+                referenceCode: retryCode,
+                bloodGroup: data.bloodGroup,
+                component: data.component,
+                unitsRequired: data.unitsRequired,
+                unitsCoordinated: 0,
+                urgency: data.urgency,
+                hospitalName: data.hospitalName.trim(),
+                hospitalAddress: data.hospitalAddress.trim(),
+                city: data.city.trim(),
+                district: data.district?.trim() || undefined,
+                state: data.state?.trim() || 'Andhra Pradesh',
+                postalCode: data.postalCode?.trim() || undefined,
+                lat: data.latitude ?? undefined,
+                lng: data.longitude ?? undefined,
+                contactName: data.contactName.trim(),
+                contactPhone: data.contactPhone.trim(),
+                preferredContact: data.preferredContact,
+                status: 'CREATED',
+                escalationLevel: 1,
+                createdBy: undefined,
+                cancellationReason: undefined,
+                notes: data.notes || data.additionalInstructions || undefined,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              },
+            };
+          }
           return { success: false, error: retryError.message };
         }
         return { success: true, data: mapDbToEmergencyRequest(retryInserted) };
+      }
+
+      // Guest submission permission handling:
+      // When unauthenticated guests submit an emergency request, the INSERT succeeds under
+      // the RLS policy "Authorized roles create requests", but the appended .select().single()
+      // returns PGRST116 because guests do not hold SELECT privileges on raw emergency_requests.
+      if (error.code === 'PGRST116' || error.message?.includes('JSON object requested')) {
+        return {
+          success: true,
+          data: {
+            id: requestId,
+            referenceCode: insertPayload.reference_code,
+            bloodGroup: data.bloodGroup,
+            component: data.component,
+            unitsRequired: data.unitsRequired,
+            unitsCoordinated: 0,
+            urgency: data.urgency,
+            hospitalName: data.hospitalName.trim(),
+            hospitalAddress: data.hospitalAddress.trim(),
+            city: data.city.trim(),
+            district: data.district?.trim() || undefined,
+            state: data.state?.trim() || 'Andhra Pradesh',
+            postalCode: data.postalCode?.trim() || undefined,
+            lat: data.latitude ?? undefined,
+            lng: data.longitude ?? undefined,
+            contactName: data.contactName.trim(),
+            contactPhone: data.contactPhone.trim(),
+            preferredContact: data.preferredContact,
+            status: 'CREATED',
+            escalationLevel: 1,
+            createdBy: undefined,
+            cancellationReason: undefined,
+            notes: data.notes || data.additionalInstructions || undefined,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        };
       }
 
       return { success: false, error: error.message };
@@ -229,30 +457,55 @@ export async function getMyEmergencyRequests(
  * Tries direct table first (creator/staff/assigned), falls back to discoverable view
  */
 export async function getEmergencyRequestById(
-  requestId: string
+  requestId: string,
+  trackingToken?: string
 ): Promise<{ success: boolean; data?: EmergencyRequest; error?: string }> {
   if (!requestId) {
     return { success: false, error: 'Request ID is required.' };
   }
 
   try {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId);
+    const resolvedToken = trackingToken || (typeof localStorage !== 'undefined' ? localStorage.getItem(`careloop_tracking_token_${requestId}`) : null);
+
     // 1. Direct query on emergency_requests (succeeds if creator, staff, or assigned)
-    const { data: fullReq, error: fullError } = await supabase
-      .from('emergency_requests')
-      .select('*')
-      .eq('id', requestId)
-      .maybeSingle();
+    let fullReqQuery = supabase.from('emergency_requests').select('*');
+    if (isUuid) {
+      fullReqQuery = fullReqQuery.eq('id', requestId);
+    } else {
+      fullReqQuery = fullReqQuery.ilike('reference_code', requestId);
+    }
+    const { data: fullReq, error: fullError } = await fullReqQuery.maybeSingle();
 
     if (fullReq) {
       return { success: true, data: mapDbToEmergencyRequest(fullReq) };
     }
 
-    // 2. Fallback to privacy-preserving discoverable view
-    const { data: discReq, error: discError } = await supabase
-      .from('discoverable_emergency_requests')
-      .select('*')
-      .eq('id', requestId)
-      .maybeSingle();
+    // 2. High-security tracking RPC: requires secret tracking_token for anonymous guests
+    // or authenticated session for request owners/coordinators
+    try {
+      const isTokenUuid = resolvedToken ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedToken) : false;
+      const { data: trackData } = await supabase.rpc('track_emergency_request', {
+        p_tracking_token: isTokenUuid ? resolvedToken : null,
+        p_request_id: isUuid ? requestId : null,
+        p_reference_code: isUuid ? null : requestId,
+      });
+      const trackRow = Array.isArray(trackData) ? trackData[0] : trackData;
+      if (trackRow && trackRow.id) {
+        return { success: true, data: mapDbToEmergencyRequest(trackRow) };
+      }
+    } catch {
+      // Ignore if RPC unavailable in older schema or mock environments
+    }
+
+    // 3. Fallback to privacy-preserving discoverable view (active requests)
+    let discReqQuery = supabase.from('discoverable_emergency_requests').select('*');
+    if (isUuid) {
+      discReqQuery = discReqQuery.eq('id', requestId);
+    } else {
+      discReqQuery = discReqQuery.ilike('reference_code', requestId);
+    }
+    const { data: discReq, error: discError } = await discReqQuery.maybeSingle();
 
     if (discReq) {
       return { success: true, data: mapDbToEmergencyRequest(discReq) };

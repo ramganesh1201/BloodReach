@@ -77,7 +77,7 @@ export const CreateRequestView: React.FC = () => {
     try {
       const res = await createEmergencyRequest(formData);
       if (res.success && res.data) {
-        navigate(`/request/confirm/${res.data.id}`);
+        navigate(`/request/confirm/${res.data.id}${res.data.trackingToken ? `?token=${res.data.trackingToken}` : ''}`);
       } else {
         setSubmitError(res.error || 'Failed to dispatch emergency blood request. Please check details and try again.');
         setIsSubmitting(false);

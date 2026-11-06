@@ -55,6 +55,7 @@ export interface EmergencyRequest {
   assignedDonors?: DonorAssignment[];
   notes?: string;
   cancellationReason?: string;
+  trackingToken?: string;
   createdAt: string;
   updatedAt: string;
 }
