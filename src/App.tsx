@@ -10,6 +10,7 @@ import { GlobalCallManager } from './components/communication/GlobalCallManager'
 
 // Lazy-loaded Views for optimal initial bundle & performance
 const LandingPage = lazy(() => import('./views/LandingPage').then(m => ({ default: m.LandingPage })));
+const LoginView = lazy(() => import('./views/LoginView').then(m => ({ default: m.LoginView })));
 const PatientView = lazy(() => import('./views/PatientView').then(m => ({ default: m.PatientView })));
 const CreateRequestView = lazy(() => import('./views/CreateRequestView').then(m => ({ default: m.CreateRequestView })));
 const RequestConfirmView = lazy(() => import('./views/RequestConfirmView').then(m => ({ default: m.RequestConfirmView })));
@@ -39,8 +40,18 @@ export const App: React.FC = () => {
           <main className="flex-grow pb-24 md:pb-12">
             <Suspense fallback={<RouteLoadingFallback />}>
               <Routes>
-                {/* Public Landing & Information */}
+                {/* Public Landing & Overview */}
                 <Route path="/" element={<LandingPage />} />
+
+                {/* Unified Authentication Portal */}
+                <Route path="/login" element={<LoginView />} />
+                <Route path="/register" element={<LoginView initialMode="signup" />} />
+
+                {/* Emergency Blood Request Flow (Public/Guest & Authenticated) */}
+                <Route path="/request" element={<CreateRequestView />} />
+                <Route path="/request/confirm/:id" element={<RequestConfirmView />} />
+                <Route path="/request/track" element={<TrackRequestView />} />
+                <Route path="/request/track/:id" element={<TrackRequestView />} />
 
                 {/* Patient / Attendant Workspace */}
                 <Route
@@ -48,40 +59,6 @@ export const App: React.FC = () => {
                   element={
                     <RoleGuard allowedRoles={['patient', 'coordinator', 'admin']}>
                       <PatientView />
-                    </RoleGuard>
-                  }
-                />
-
-                {/* Emergency Request Flow */}
-                <Route
-                  path="/request"
-                  element={
-                    <RoleGuard allowedRoles={['patient', 'coordinator', 'admin']}>
-                      <CreateRequestView />
-                    </RoleGuard>
-                  }
-                />
-                <Route
-                  path="/request/confirm/:id"
-                  element={
-                    <RoleGuard allowedRoles={['patient', 'coordinator', 'admin']}>
-                      <RequestConfirmView />
-                    </RoleGuard>
-                  }
-                />
-                <Route
-                  path="/request/track"
-                  element={
-                    <RoleGuard allowedRoles={['patient', 'donor', 'blood_centre', 'coordinator', 'admin']}>
-                      <TrackRequestView />
-                    </RoleGuard>
-                  }
-                />
-                <Route
-                  path="/request/track/:id"
-                  element={
-                    <RoleGuard allowedRoles={['patient', 'donor', 'blood_centre', 'coordinator', 'admin']}>
-                      <TrackRequestView />
                     </RoleGuard>
                   }
                 />

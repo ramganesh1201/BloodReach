@@ -1,13 +1,22 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useBloodStore } from '../../store/useBloodStore';
-import { MOBILE_NAV_BY_ROLE } from '../../config/navigation';
+import { MOBILE_NAV_BY_ROLE, NavItem } from '../../config/navigation';
+import { Home, Droplet, Shield, Activity } from 'lucide-react';
+
+const PUBLIC_MOBILE_NAV: NavItem[] = [
+  { path: '/', label: 'Home', icon: Home, exact: true },
+  { path: '/request', label: 'Request Blood', icon: Droplet },
+  { path: '/request/track', label: 'Track Request', icon: Activity },
+  { path: '/login', label: 'Sign In', icon: Shield },
+];
 
 export const MobileNav: React.FC = () => {
-  const { currentRole } = useBloodStore();
+  const { authenticatedRole, demoExperience } = useBloodStore();
   const location = useLocation();
 
-  const mobileNavItems = MOBILE_NAV_BY_ROLE[currentRole] || MOBILE_NAV_BY_ROLE['patient'];
+  const effectiveRole = authenticatedRole || demoExperience;
+  const mobileNavItems = effectiveRole ? (MOBILE_NAV_BY_ROLE[effectiveRole] || PUBLIC_MOBILE_NAV) : PUBLIC_MOBILE_NAV;
 
   return (
     <nav

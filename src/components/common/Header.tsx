@@ -18,8 +18,16 @@ import {
   ChevronDown,
   MessageSquare,
   Building2,
-  Radio
+  Radio,
+  Home,
+  Search
 } from 'lucide-react';
+
+const PUBLIC_DESKTOP_NAV = [
+  { path: '/', label: 'Home', icon: Home, exact: true },
+  { path: '/request', label: 'Request Blood', icon: Droplet },
+  { path: '/request/track', label: 'Track Request', icon: Search },
+];
 
 const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
   patient: 'Patient / Attendant',
@@ -54,7 +62,9 @@ export const Header: React.FC = () => {
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  const desktopNavItems = DESKTOP_NAV_BY_ROLE[currentRole] || DESKTOP_NAV_BY_ROLE['patient'];
+  const desktopNavItems = (authenticatedRole || demoExperience)
+    ? (DESKTOP_NAV_BY_ROLE[currentRole] || DESKTOP_NAV_BY_ROLE['patient'])
+    : PUBLIC_DESKTOP_NAV;
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

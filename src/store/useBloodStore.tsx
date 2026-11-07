@@ -524,22 +524,23 @@ interface BloodStoreContextType {
   currentRole: UserRole;
   demoExperience: DemoExperience;
   authenticatedRole: UserRole | null;
+  isAuthenticated: boolean;
   isAuthLoading: boolean;
   authError: string | null;
 
   // Auth Operations
-  signIn: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  signIn: (email: string, password?: string) => Promise<{ success: boolean; error?: string; role?: UserRole }>;
   signUp: (params: {
     email: string;
     password?: string;
     fullName: string;
     phone: string;
-    role: UserRole;
+    role?: UserRole;
     bloodGroup?: BloodGroup;
     city?: string;
     district?: string;
-  }) => Promise<{ success: boolean; error?: string }>;
-  resetPassword: (email: string) => Promise<{ success: boolean; message: string }>;
+  }) => Promise<{ success: boolean; error?: string; role?: UserRole; needsEmailConfirmation?: boolean }>;
+  resetPassword: (email: string) => Promise<{ success: boolean; message: string; error?: string }>;
   signOut: () => Promise<void>;
   switchRole: (role: UserRole) => void;
   selectDemoExperience: (role: UserRole) => void;
@@ -737,17 +738,28 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Persistence / Mode indicator: explicit demo preview vs live database
   const dataSource: 'database' | 'demo' = demoExperience ? 'demo' : 'database';
+  const isAuthenticated = Boolean(authenticatedRole && currentUser);
 
   // Authoritative Session & Profile Verification via Supabase Auth
   useEffect(() => {
     let isMounted = true;
 
     const checkSession = async () => {
-      if (!isSupabaseConfigured) return;
+      if (!isSupabaseConfigured) {
+        setIsAuthLoading(false);
+        return;
+      }
+      setIsAuthLoading(true);
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) {
           console.warn('[CareLoop Auth] Session retrieval error:', sessionError.message);
+          if (isMounted) {
+            setCurrentUser(null);
+            setAuthenticatedRole(null);
+            localStorage.removeItem('careloop_auth_role');
+            localStorage.removeItem('careloop_user_profile');
+          }
           return;
         }
 
@@ -782,10 +794,32 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             localStorage.setItem('careloop_auth_role', verifiedRole);
             sessionStorage.removeItem('careloop_demo_experience');
             notificationService.initUserSession(session.user.id);
+          } else if (isMounted) {
+            // User in auth.users but no profile row found
+            setCurrentUser(null);
+            setAuthenticatedRole(null);
+            localStorage.removeItem('careloop_auth_role');
+            localStorage.removeItem('careloop_user_profile');
           }
+        } else if (isMounted) {
+          // No active Supabase session -> clean up unauthenticated state
+          setCurrentUser(null);
+          setAuthenticatedRole(null);
+          localStorage.removeItem('careloop_auth_role');
+          localStorage.removeItem('careloop_user_profile');
         }
       } catch (err: any) {
         console.warn('[CareLoop Auth] Session check caught error:', err?.message);
+        if (isMounted) {
+          setCurrentUser(null);
+          setAuthenticatedRole(null);
+          localStorage.removeItem('careloop_auth_role');
+          localStorage.removeItem('careloop_user_profile');
+        }
+      } finally {
+        if (isMounted) {
+          setIsAuthLoading(false);
+        }
       }
     };
 
@@ -829,12 +863,13 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         } catch (err) {
           console.warn('[CareLoop Auth] Profile sync error:', err);
         }
-      } else if (event === 'SIGNED_OUT') {
+      } else if (event === 'SIGNED_OUT' || !session) {
         if (isMounted) {
           setCurrentUser(null);
           setAuthenticatedRole(null);
           localStorage.removeItem('careloop_auth_role');
           localStorage.removeItem('careloop_user_profile');
+          sessionStorage.removeItem('careloop_demo_experience');
           notificationService.cleanup();
         }
       }
@@ -1234,61 +1269,104 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   // Auth Operations
-  const signIn = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+  const signIn = async (
+    email: string,
+    password?: string
+  ): Promise<{ success: boolean; error?: string; role?: UserRole }> => {
     setIsAuthLoading(true);
     setAuthError(null);
 
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      setIsAuthLoading(false);
+      return { success: false, error: 'Email address is required.' };
+    }
+    if (!password) {
+      setIsAuthLoading(false);
+      return { success: false, error: 'Password is required.' };
+    }
+
     try {
-      // If live Supabase is configured, authenticate via Supabase Auth
-      if (isSupabaseConfigured && password) {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          // If demo persona is not yet seeded in live Supabase Auth, allow graceful local authorization
-          if (email.endsWith('@careloop.health') || email.endsWith('@careloop.org') || email.includes('admin') || email.includes('coordinator')) {
-            console.info(`Authorized workspace persona ${email} initialized.`);
-          } else {
-            setAuthError(error.message);
-            setIsAuthLoading(false);
-            return { success: false, error: error.message };
-          }
-        }
+      if (!isSupabaseConfigured) {
+        const fallbackRole: UserRole = 'patient';
+        const profile: UserProfile = {
+          id: `usr-${Date.now()}`,
+          email: cleanEmail,
+          fullName: cleanEmail.split('@')[0],
+          role: fallbackRole,
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setCurrentUser(profile);
+        setAuthenticatedRole(fallbackRole);
+        setIsAuthLoading(false);
+        return { success: true, role: fallbackRole };
       }
 
-      // Determine role from email or profile
-      let role: UserRole = 'patient';
-      if (email.includes('admin')) role = 'admin';
-      else if (email.includes('coordinator')) role = 'coordinator';
-      else if (email.includes('centre') || email.includes('blood') || email.includes('bank')) role = 'blood_centre';
-      else if (email.includes('donor') || email.includes('sarah')) role = 'donor';
+      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
 
-      const profile: UserProfile = {
-        id: `usr-${Date.now()}`,
-        email,
-        fullName: email.split('@')[0].replace('.', ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
-        role,
-        phone: '+91 98490 00000',
-        city: 'Hyderabad',
-        district: 'Hyderabad',
-        isAvailable: true,
-        status: 'ACTIVE',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+      if (authErr) {
+        let msg = authErr.message;
+        if (msg.includes('Invalid login credentials')) {
+          msg = 'Invalid email or password. Please verify your credentials.';
+        } else if (msg.includes('Email not confirmed')) {
+          msg = 'Please verify your email address before signing in.';
+        }
+        setAuthError(msg);
+        setIsAuthLoading(false);
+        return { success: false, error: msg };
+      }
+
+      if (!authData.user) {
+        setIsAuthLoading(false);
+        return { success: false, error: 'Authentication failed. No user record returned.' };
+      }
+
+      // Fetch the user's actual profile from Supabase profiles table
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+      const resolvedRole: UserRole = (profileRow?.role as UserRole) || 'patient';
+      const fullName = profileRow?.full_name || cleanEmail.split('@')[0];
+
+      const verifiedProfile: UserProfile = {
+        id: authData.user.id,
+        email: cleanEmail,
+        fullName,
+        role: resolvedRole,
+        phone: profileRow?.phone || '',
+        bloodGroup: profileRow?.blood_group,
+        city: profileRow?.city || 'Hyderabad',
+        district: profileRow?.district,
+        isAvailable: profileRow?.is_available ?? true,
+        status: (profileRow?.status as any) || 'ACTIVE',
+        createdAt: profileRow?.created_at || new Date().toISOString(),
+        updatedAt: profileRow?.updated_at || new Date().toISOString(),
       };
 
-      setCurrentUser(profile);
-      setAuthenticatedRole(role);
+      setCurrentUser(verifiedProfile);
+      setAuthenticatedRole(resolvedRole);
       setDemoExperience(null);
-      localStorage.setItem('careloop_user_profile', JSON.stringify(profile));
-      localStorage.setItem('careloop_auth_role', role);
+      localStorage.setItem('careloop_user_profile', JSON.stringify(verifiedProfile));
+      localStorage.setItem('careloop_auth_role', resolvedRole);
       sessionStorage.removeItem('careloop_demo_experience');
+      notificationService.initUserSession(authData.user.id);
 
       notificationService.sendInAppNotification({
         title: 'Authentication Successful',
-        content: `Signed in as ${profile.fullName} (${role.toUpperCase()}).`,
+        content: `Signed in as ${verifiedProfile.fullName} (${resolvedRole.toUpperCase()}).`,
       });
 
       setIsAuthLoading(false);
-      return { success: true };
+      return { success: true, role: resolvedRole };
     } catch (err: any) {
       const errMsg = err?.message || 'Authentication error';
       setAuthError(errMsg);
@@ -1302,83 +1380,113 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     password?: string;
     fullName: string;
     phone: string;
-    role: UserRole;
+    role?: UserRole;
     bloodGroup?: BloodGroup;
     city?: string;
     district?: string;
-  }): Promise<{ success: boolean; error?: string }> => {
+  }): Promise<{ success: boolean; error?: string; role?: UserRole; needsEmailConfirmation?: boolean }> => {
     setIsAuthLoading(true);
     setAuthError(null);
 
+    const cleanEmail = params.email.trim().toLowerCase();
+    const cleanName = params.fullName.trim();
+    const cleanPhone = params.phone.trim();
+
+    if (!cleanEmail || !cleanName || !cleanPhone || !params.password) {
+      setIsAuthLoading(false);
+      return { success: false, error: 'All mandatory profile fields and password are required.' };
+    }
+
+    if (params.password.length < 6) {
+      setIsAuthLoading(false);
+      return { success: false, error: 'Password must be at least 6 characters long.' };
+    }
+
     try {
-      if (isSupabaseConfigured && params.password) {
-        const { data, error } = await supabase.auth.signUp({
-          email: params.email,
-          password: params.password,
-          options: {
-            data: {
-              full_name: params.fullName,
-              phone: params.phone,
-              role: params.role,
-            },
-          },
-        });
-        if (error) {
-          setAuthError(error.message);
-          setIsAuthLoading(false);
-          return { success: false, error: error.message };
-        }
-      }
-
-      const newProfile: UserProfile = {
-        id: `usr-${Date.now()}`,
-        email: params.email,
-        fullName: params.fullName,
-        phone: params.phone,
-        role: params.role,
-        bloodGroup: params.bloodGroup,
-        city: params.city || 'Hyderabad',
-        district: params.district || 'Hyderabad',
-        isAvailable: true,
-        status: 'ACTIVE',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      setCurrentUser(newProfile);
-      setAuthenticatedRole(params.role);
-      setDemoExperience(null);
-      localStorage.setItem('careloop_user_profile', JSON.stringify(newProfile));
-      localStorage.setItem('careloop_auth_role', params.role);
-      sessionStorage.removeItem('careloop_demo_experience');
-
-      // If registered as donor, register in donor directory
-      if (params.role === 'donor') {
-        const newDonor: Donor = {
-          id: `donor-${Date.now()}`,
-          profileId: newProfile.id,
-          fullName: params.fullName,
-          phone: params.phone,
-          email: params.email,
-          bloodGroup: params.bloodGroup || 'O+',
+      if (!isSupabaseConfigured) {
+        const fallbackRole: UserRole = 'patient';
+        const newProfile: UserProfile = {
+          id: `usr-${Date.now()}`,
+          email: cleanEmail,
+          fullName: cleanName,
+          phone: cleanPhone,
+          role: fallbackRole,
           city: params.city || 'Hyderabad',
           district: params.district || 'Hyderabad',
           isAvailable: true,
-          totalDonations: 0,
-          isMedicallyCleared: true,
-          approxDistanceKm: 3.0,
-          registeredAt: new Date().toISOString(),
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         };
-        setDonors((prev) => [newDonor, ...prev]);
+        setCurrentUser(newProfile);
+        setAuthenticatedRole(fallbackRole);
+        setIsAuthLoading(false);
+        return { success: true, role: fallbackRole };
+      }
+
+      // Public registrations strictly receive the 'patient' role through the trusted handle_new_user trigger
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: params.password,
+        options: {
+          data: {
+            full_name: cleanName,
+            phone: cleanPhone,
+          },
+        },
+      });
+
+      if (authErr) {
+        let msg = authErr.message;
+        if (msg.includes('User already registered')) {
+          msg = 'An account with this email address already exists. Please sign in instead.';
+        }
+        setAuthError(msg);
+        setIsAuthLoading(false);
+        return { success: false, error: msg };
+      }
+
+      const sessionUser = authData.session?.user || authData.user;
+      const needsEmailConfirmation = !authData.session && Boolean(authData.user && !authData.user.confirmed_at);
+
+      if (sessionUser && !needsEmailConfirmation) {
+        const { data: profileRow } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', sessionUser.id)
+          .maybeSingle();
+
+        const role: UserRole = (profileRow?.role as UserRole) || 'patient';
+        const newProfile: UserProfile = {
+          id: sessionUser.id,
+          email: cleanEmail,
+          fullName: cleanName,
+          phone: cleanPhone,
+          role,
+          city: params.city || 'Hyderabad',
+          district: params.district || 'Hyderabad',
+          isAvailable: true,
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        setCurrentUser(newProfile);
+        setAuthenticatedRole(role);
+        setDemoExperience(null);
+        localStorage.setItem('careloop_user_profile', JSON.stringify(newProfile));
+        localStorage.setItem('careloop_auth_role', role);
+        sessionStorage.removeItem('careloop_demo_experience');
+        notificationService.initUserSession(sessionUser.id);
       }
 
       notificationService.sendInAppNotification({
         title: 'Account Registered',
-        content: `Welcome to CareLoop, ${params.fullName}. Your ${params.role} account is now active.`,
+        content: `Welcome to CareLoop, ${cleanName}. Your account has been registered.`,
       });
 
       setIsAuthLoading(false);
-      return { success: true };
+      return { success: true, role: 'patient', needsEmailConfirmation };
     } catch (err: any) {
       const errMsg = err?.message || 'Registration failed';
       setAuthError(errMsg);
@@ -1387,18 +1495,44 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
-  const resetPassword = async (email: string): Promise<{ success: boolean; message: string }> => {
-    if (isSupabaseConfigured) {
-      await supabase.auth.resetPasswordForEmail(email);
+  const resetPassword = async (
+    email: string
+  ): Promise<{ success: boolean; message: string; error?: string }> => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      return {
+        success: false,
+        message: 'Please provide a valid email address.',
+        error: 'Email address is required.',
+      };
     }
-    notificationService.sendInAppNotification({
-      title: 'Password Reset Initiated',
-      content: `A secure password reset verification link has been dispatched to ${email}.`,
-    });
-    return {
-      success: true,
-      message: `Password recovery link dispatched to ${email}. Please check your inbox.`,
-    };
+
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: `${window.location.origin}/login`,
+        });
+        if (error) {
+          return { success: false, message: error.message, error: error.message };
+        }
+      }
+
+      notificationService.sendInAppNotification({
+        title: 'Password Reset Dispatched',
+        content: `Instructions to reset your password have been sent to ${cleanEmail}.`,
+      });
+
+      return {
+        success: true,
+        message: `Password recovery link dispatched to ${cleanEmail}. Please check your inbox.`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err?.message || 'Failed to dispatch reset email.',
+        error: err?.message,
+      };
+    }
   };
 
   const signOut = async () => {
@@ -3028,6 +3162,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         currentRole,
         demoExperience,
         authenticatedRole,
+        isAuthenticated,
         isAuthLoading,
         authError,
         signIn,
