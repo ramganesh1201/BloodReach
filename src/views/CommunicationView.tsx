@@ -6,18 +6,14 @@ import { ChatTimeline } from '../components/communication/ChatTimeline';
 import { MessageComposer } from '../components/communication/MessageComposer';
 import { CoordinationActionPanel } from '../components/communication/CoordinationActionPanel';
 import { ContextPanel } from '../components/communication/ContextPanel';
+import { WorkspaceHeader } from '../components/common/WorkspaceHeader';
 import {
   MessageSquare,
   ShieldCheck,
   PhoneCall,
-  Menu,
-  Info,
-  ChevronRight,
   Radio,
-  Layers,
-  ArrowLeft,
   Sparkles,
-  AlertCircle,
+  Info,
 } from 'lucide-react';
 import { CoordinationEventType, MessageAttachment } from '../types';
 
@@ -51,14 +47,17 @@ export const CommunicationView: React.FC = () => {
   const userConversations = getConversationsForUser();
 
   // Active conversation object
-  const activeConversation = conversations.find((c) => c.id === activeConversationId) || userConversations[0] || null;
+  const activeConversation =
+    conversations.find((c) => c.id === activeConversationId) || userConversations[0] || null;
 
   // Active chat stream
-  const activeMessages = activeConversation ? (chatMessages[activeConversation.id] || []) : [];
+  const activeMessages = activeConversation ? chatMessages[activeConversation.id] || [] : [];
 
   // Tracking items for Before-Acceptance state
   const trackingItems = activeRequest ? getDonorTrackingList(activeRequest.id) : [];
-  const acceptedDonorsForRequest = trackingItems.filter((t) => t.hasAccepted || t.status === 'ACCEPTED');
+  const acceptedDonorsForRequest = trackingItems.filter(
+    (t) => t.hasAccepted || t.status === 'ACCEPTED'
+  );
 
   // Mark active conversation as read when selected
   useEffect(() => {
@@ -84,7 +83,10 @@ export const CommunicationView: React.FC = () => {
   };
 
   // Handle submitting a coordination event milestone
-  const handleSubmitMilestone = (eventType: CoordinationEventType, eventData?: Record<string, any>) => {
+  const handleSubmitMilestone = (
+    eventType: CoordinationEventType,
+    eventData?: Record<string, any>
+  ) => {
     if (!activeConversation) return;
     submitCoordinationEvent(activeConversation.id, eventType, eventData);
   };
@@ -96,51 +98,49 @@ export const CommunicationView: React.FC = () => {
   };
 
   // Determine if we should show the Before-Acceptance tracker
-  // If the selected request has no accepted donors and the user is a requester/coordinator viewing it
   const isBeforeAcceptance = currentRole !== 'donor' && acceptedDonorsForRequest.length === 0;
 
   return (
-    <div className="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 space-y-4 animate-fade-in min-h-[calc(100vh-5rem)] flex flex-col">
-      {/* 1. Header Bar with Request Selector & State Switcher */}
-      <div className="bg-white rounded-2xl border border-[#E6E9E7] p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-subtle shrink-0">
+    <div className="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8 space-y-4 sm:space-y-6 animate-fade-in min-h-[calc(100vh-5rem)] flex flex-col">
+      {/* Header Bar with Request Selector */}
+      <div className="bg-app-surface rounded-xl border border-app-border p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-subtle shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#B42332]/10 text-[#B42332] flex items-center justify-center font-bold shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-brand-light text-brand flex items-center justify-center font-bold shrink-0">
             <MessageSquare className="w-5 h-5" />
           </div>
-          <div>
+          <div className="space-y-0.5">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-bold text-[#202322] tracking-tight">
+              <h1 className="text-lg sm:text-xl font-bold text-app-text tracking-tight font-display">
                 Emergency Communication Hub
               </h1>
-              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-success-light text-success border border-success-border">
                 <ShieldCheck className="w-3 h-3" />
-                Encrypted & Isolated
+                <span>End-to-End Relay</span>
               </span>
             </div>
-            <p className="text-xs text-[#69716F]">
-              Private 1-on-1 channels activated exclusively between patient attendant and accepted responders.
+            <p className="text-xs text-app-text-secondary leading-relaxed">
+              Private 1-on-1 channels activated exclusively between hospital attendants and verified responders.
             </p>
           </div>
         </div>
 
         {/* Request Selector & View Mode Switcher */}
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 bg-[#F8F9F8] border border-[#E6E9E7] rounded-xl p-1">
-            <span className="text-[11px] font-semibold text-[#69716F] px-2">Request:</span>
+          <div className="flex items-center gap-1.5 bg-app-muted/60 border border-app-border rounded-lg p-1">
+            <span className="text-[11px] font-semibold text-app-text-secondary px-2">Request:</span>
             {requests.map((r) => (
               <button
                 key={r.id}
                 type="button"
                 onClick={() => {
                   setSelectedRequestId(r.id);
-                  // Find if there's a conversation for this request
                   const conv = conversations.find((c) => c.requestId === r.id);
                   if (conv) setActiveConversationId(conv.id);
                 }}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
                   selectedRequestId === r.id
-                    ? 'bg-white text-[#202322] shadow-sm border border-[#E6E9E7]'
-                    : 'text-[#69716F] hover:text-[#202322]'
+                    ? 'bg-app-surface text-app-text shadow-xs border border-app-border'
+                    : 'text-app-text-secondary hover:text-app-text'
                 }`}
               >
                 #{r.referenceCode} ({r.bloodGroup})
@@ -148,25 +148,22 @@ export const CommunicationView: React.FC = () => {
             ))}
           </div>
 
-          {/* Quick Simulation Button for Demo testing */}
+          {/* Simulation Button for testing if in Before-Acceptance mode */}
           {isBeforeAcceptance && (
             <button
               type="button"
               onClick={() => handleSimulateAcceptance('donor-1')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#B42332] text-white hover:bg-[#8F1928] shadow-sm transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand text-white hover:bg-brand-hover shadow-xs transition-all"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              Simulate Donor Acceptance
+              <span>Simulate Donor Acceptance</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* 2. Main Experience Display */}
+      {/* Main Experience Display */}
       {isBeforeAcceptance ? (
-        /* ========================================================================= */
-        /* EXPERIENCE A: BEFORE DONOR ACCEPTANCE (Tracking Interface)                */
-        /* ========================================================================= */
         <BeforeAcceptanceTracker
           request={activeRequest}
           trackingItems={trackingItems}
@@ -174,17 +171,16 @@ export const CommunicationView: React.FC = () => {
           onInitiateEscalation={() => escalateRequest(activeRequest.id)}
         />
       ) : (
-        /* ========================================================================= */
-        /* EXPERIENCE B: AFTER DONOR ACCEPTANCE (3-Pane Communication Layout)        */
-        /* ========================================================================= */
-        <div className="flex-1 bg-white rounded-2xl border border-[#E6E9E7] shadow-subtle overflow-hidden flex flex-col min-h-[640px]">
+        <div className="flex-1 bg-app-surface rounded-xl border border-app-border shadow-subtle overflow-hidden flex flex-col min-h-[640px]">
           {/* Mobile Tab Switcher */}
-          <div className="md:hidden flex items-center justify-around border-b border-[#E6E9E7] bg-[#F8F9F8] p-1.5 text-xs font-bold">
+          <div className="md:hidden flex items-center justify-around border-b border-app-border bg-app-muted/40 p-1.5 text-xs font-bold">
             <button
               type="button"
               onClick={() => setMobileTab('sidebar')}
-              className={`flex-1 py-1.5 rounded-lg text-center transition-colors ${
-                mobileTab === 'sidebar' ? 'bg-white text-[#202322] shadow-xs' : 'text-[#69716F]'
+              className={`flex-1 py-1.5 rounded-md text-center transition-colors ${
+                mobileTab === 'sidebar'
+                  ? 'bg-app-surface text-app-text shadow-xs font-bold'
+                  : 'text-app-text-secondary font-medium'
               }`}
             >
               Conversations ({userConversations.length})
@@ -192,8 +188,10 @@ export const CommunicationView: React.FC = () => {
             <button
               type="button"
               onClick={() => setMobileTab('chat')}
-              className={`flex-1 py-1.5 rounded-lg text-center transition-colors ${
-                mobileTab === 'chat' ? 'bg-white text-[#202322] shadow-xs' : 'text-[#69716F]'
+              className={`flex-1 py-1.5 rounded-md text-center transition-colors ${
+                mobileTab === 'chat'
+                  ? 'bg-app-surface text-app-text shadow-xs font-bold'
+                  : 'text-app-text-secondary font-medium'
               }`}
             >
               Live Chat
@@ -201,8 +199,10 @@ export const CommunicationView: React.FC = () => {
             <button
               type="button"
               onClick={() => setMobileTab('context')}
-              className={`flex-1 py-1.5 rounded-lg text-center transition-colors ${
-                mobileTab === 'context' ? 'bg-white text-[#202322] shadow-xs' : 'text-[#69716F]'
+              className={`flex-1 py-1.5 rounded-md text-center transition-colors ${
+                mobileTab === 'context'
+                  ? 'bg-app-surface text-app-text shadow-xs font-bold'
+                  : 'text-app-text-secondary font-medium'
               }`}
             >
               Details
@@ -210,7 +210,7 @@ export const CommunicationView: React.FC = () => {
           </div>
 
           <div className="flex-1 grid grid-cols-1 md:grid-cols-12 min-h-0 overflow-hidden">
-            {/* Left Pane: Conversation Sidebar (3 cols on desktop) */}
+            {/* Left Pane: Conversation Sidebar */}
             <div
               className={`md:col-span-4 lg:col-span-3 h-full overflow-hidden ${
                 mobileTab === 'sidebar' ? 'block' : 'hidden md:block'
@@ -227,33 +227,33 @@ export const CommunicationView: React.FC = () => {
               />
             </div>
 
-            {/* Middle Pane: Main Chat Stream & Composer (6 cols on lg, 8 cols on md) */}
+            {/* Middle Pane: Main Chat Stream & Composer */}
             <div
-              className={`md:col-span-8 lg:col-span-6 h-full flex flex-col border-r border-[#E6E9E7] overflow-hidden ${
+              className={`md:col-span-8 lg:col-span-6 h-full flex flex-col border-r border-app-border overflow-hidden ${
                 mobileTab === 'chat' ? 'flex' : 'hidden md:flex'
               }`}
             >
               {activeConversation ? (
                 <>
                   {/* Chat Header */}
-                  <div className="p-3.5 border-b border-[#E6E9E7] bg-white flex items-center justify-between gap-3 shrink-0">
+                  <div className="p-3.5 border-b border-app-border bg-app-surface flex items-center justify-between gap-3 shrink-0">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-[#8F1928]/10 text-[#8F1928] font-bold flex items-center justify-center text-sm border border-[#8F1928]/20 shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-brand-light text-brand font-bold flex items-center justify-center text-sm border border-brand/20 shrink-0 font-display">
                         {activeConversation.donorBloodGroup}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <h2 className="text-sm font-bold text-[#202322] truncate">
+                          <h2 className="text-sm font-bold text-app-text truncate">
                             {currentRole === 'donor'
                               ? activeConversation.requesterName
                               : activeConversation.donorName}
                           </h2>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
-                            <Radio className="w-2.5 h-2.5 text-emerald-600 animate-pulse" />
-                            Active
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-success bg-success-light px-2 py-0.5 rounded-full border border-success-border shrink-0">
+                            <Radio className="w-2.5 h-2.5 text-success animate-pulse" />
+                            <span>Active Channel</span>
                           </span>
                         </div>
-                        <p className="text-[11px] text-[#69716F] truncate">
+                        <p className="text-[11px] text-app-text-secondary truncate">
                           Request #{activeConversation.referenceCode} • {activeConversation.hospitalName}
                         </p>
                       </div>
@@ -263,7 +263,7 @@ export const CommunicationView: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleStartCall}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#B42332] text-white hover:bg-[#8F1928] transition-colors shadow-xs"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand text-white hover:bg-brand-hover transition-colors shadow-xs"
                       >
                         <PhoneCall className="w-3.5 h-3.5" />
                         <span className="hidden sm:inline">Voice Call</span>
@@ -272,7 +272,8 @@ export const CommunicationView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setMobileTab('context')}
-                        className="md:hidden p-2 rounded-xl border border-[#E6E9E7] text-[#69716F] hover:bg-[#F8F9F8]"
+                        className="md:hidden p-2 rounded-lg border border-app-border text-app-text-secondary hover:bg-app-muted"
+                        aria-label="Toggle details view"
                       >
                         <Info className="w-4 h-4" />
                       </button>
@@ -300,21 +301,23 @@ export const CommunicationView: React.FC = () => {
                   />
                 </>
               ) : (
-                <div className="flex-1 flex items-center justify-center p-8 text-center bg-[#F8F9F8]">
+                <div className="flex-1 flex items-center justify-center p-8 text-center bg-app-muted/30">
                   <div className="space-y-3 max-w-sm">
-                    <div className="w-12 h-12 rounded-2xl bg-white border border-[#E6E9E7] text-[#B42332] flex items-center justify-center mx-auto shadow-xs">
+                    <div className="w-12 h-12 rounded-xl bg-app-surface border border-app-border text-brand flex items-center justify-center mx-auto shadow-xs">
                       <MessageSquare className="w-6 h-6" />
                     </div>
-                    <h3 className="text-sm font-bold text-[#202322]">No Conversation Selected</h3>
-                    <p className="text-xs text-[#69716F]">
-                      Choose an accepted responder from the directory on the left to start coordination.
+                    <h3 className="text-sm font-bold text-app-text font-display">
+                      No Conversation Selected
+                    </h3>
+                    <p className="text-xs text-app-text-secondary leading-relaxed">
+                      Choose an accepted responder from the directory on the left to coordinate dispatch.
                     </p>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Right Pane: Context & Facility Guidelines (3 cols on lg, hidden on md) */}
+            {/* Right Pane: Context & Facility Guidelines */}
             <div
               className={`lg:col-span-3 h-full overflow-hidden ${
                 mobileTab === 'context' ? 'block' : 'hidden lg:block'
@@ -327,7 +330,7 @@ export const CommunicationView: React.FC = () => {
                   onInitiateCall={handleStartCall}
                 />
               ) : (
-                <div className="p-6 text-center text-xs text-[#69716F]">
+                <div className="p-6 text-center text-xs text-app-text-secondary">
                   Select an active conversation to inspect request parameters.
                 </div>
               )}

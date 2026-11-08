@@ -2940,6 +2940,11 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     newUnits: number
   ) => {
     const nowIso = new Date().toISOString();
+    const prevItem = inventory.find(
+      (item) => item.bloodCentreId === centreId && item.bloodGroup === bloodGroup && item.component === component
+    );
+    const previousUnits = prevItem ? prevItem.units : 0;
+
     // Optimistic local state update
     setInventory((prev) =>
       prev.map((item) =>
@@ -2953,12 +2958,6 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       prev.map((c) => (c.id === centreId ? { ...c, inventoryUpdatedAt: nowIso } : c))
     );
 
-    notificationService.sendInAppNotification({
-      title: 'Blood Stock Updated',
-      content: `Inventory for ${bloodGroup} ${component} updated to ${newUnits} unit(s).`,
-      idempotencyKey: `inv-update:${centreId}:${bloodGroup}:${component}:${newUnits}`,
-    });
-
     // Real Supabase persistence
     if (isSupabaseConfigured && currentUser && ['coordinator', 'blood_centre', 'admin'].includes(currentRole)) {
       const res = await inventoryService.setInventoryAtomic({
@@ -2971,15 +2970,37 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       if (!res.success) {
         console.error('[Store] Failed to update inventory in DB:', res.error);
-        setBackendError(res.error || 'Failed to persist inventory change');
-        const refreshed = await inventoryService.fetchInventory(centreId);
-        if (refreshed.data.length > 0) {
-          setInventory((prev) => {
-            const map = new Map(refreshed.data.map((item) => [`${item.bloodCentreId}:${item.bloodGroup}:${item.component}`, item]));
-            return prev.map((item) => map.get(`${item.bloodCentreId}:${item.bloodGroup}:${item.component}`) || item);
-          });
-        }
+        setBackendError(res.error || 'Failed to persist inventory change to database.');
+
+        // Rollback state on database RPC rejection
+        setInventory((prev) =>
+          prev.map((item) =>
+            item.bloodCentreId === centreId && item.bloodGroup === bloodGroup && item.component === component
+              ? { ...item, units: previousUnits, updatedAt: prevItem?.updatedAt || nowIso }
+              : item
+          )
+        );
+
+        notificationService.sendInAppNotification({
+          title: 'Stock Update Failed',
+          content: `Database update failed: ${res.error || 'Could not persist unit change'}. Reverted to ${previousUnits} U.`,
+          idempotencyKey: `inv-fail:${centreId}:${bloodGroup}:${component}:${Date.now()}`,
+        });
+        return;
       }
+
+      notificationService.sendInAppNotification({
+        title: 'Blood Stock Persisted',
+        content: `Inventory for ${bloodGroup} ${component} confirmed at ${newUnits} unit(s) in database.`,
+        idempotencyKey: `inv-update:${centreId}:${bloodGroup}:${component}:${newUnits}`,
+      });
+    } else {
+      // Local evaluation or offline mode: honest uncommitted notification
+      notificationService.sendInAppNotification({
+        title: 'Local Inventory Adjusted',
+        content: `Local reserve for ${bloodGroup} ${component} set to ${newUnits} unit(s) (Uncommitted/Local Preview).`,
+        idempotencyKey: `inv-local:${centreId}:${bloodGroup}:${component}:${newUnits}`,
+      });
     }
   };
 

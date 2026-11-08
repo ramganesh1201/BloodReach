@@ -1,27 +1,26 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { KpiOverview } from '../components/coordinator/KpiOverview';
 import { EmergencyMatrix } from '../components/coordinator/EmergencyMatrix';
 import { EventTimeline } from '../components/emergency/EventTimeline';
 import { findPotentialResponders } from '../services/matchingEngine';
 import { EmergencyRequest } from '../types';
+import { WorkspaceHeader } from '../components/common/WorkspaceHeader';
 import {
   Activity,
   AlertTriangle,
   ShieldCheck,
   CheckCircle2,
-  ChevronRight,
   X,
-  Phone,
   Building,
   UserCheck,
   Award,
-  Layers,
-  Sparkles,
   MessageSquare,
-  ArrowRight
+  ArrowRight,
+  Maximize2,
+  Check,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 
 export const CoordinatorView: React.FC = () => {
   const {
@@ -33,7 +32,8 @@ export const CoordinatorView: React.FC = () => {
     verifyAndFulfillRequest,
     assignDonorToRequest,
     bloodCentres,
-    currentUser
+    currentUser,
+    isOffline,
   } = useBloodStore();
 
   const navigate = useNavigate();
@@ -74,44 +74,56 @@ export const CoordinatorView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 space-y-6 animate-fade-in">
+    <div className="max-w-7xl mx-auto py-6 sm:py-8 px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8 animate-fade-in">
       {/* Donor Assignment Modal */}
       {assignModalDonorId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-app-text/60 backdrop-blur-sm animate-fade-in">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="assign-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-app-text/60 backdrop-blur-sm animate-fade-in"
+        >
           <div className="bg-app-surface rounded-xl p-6 max-w-md w-full shadow-elevated border border-app-border space-y-4">
             <div className="flex items-center justify-between border-b border-app-border pb-3">
               <div className="flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-success" />
-                <h3 className="text-base font-bold text-app-text">Assign Registered Volunteer</h3>
+                <h3 id="assign-modal-title" className="text-base font-bold text-app-text font-display">
+                  Assign Volunteer Candidate
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setAssignModalDonorId(null)}
-                className="text-app-text-secondary hover:text-app-text"
+                className="text-app-text-secondary hover:text-app-text p-1 rounded transition-colors"
+                aria-label="Close dialog"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {assignFeedback && (
-              <div className="p-3 rounded-lg bg-success-light border border-success-border text-xs text-success font-semibold">
-                {assignFeedback}
+              <div className="p-3 rounded-lg bg-success-light border border-success-border text-xs text-success font-semibold flex items-center gap-1.5">
+                <Check className="w-4 h-4 shrink-0" />
+                <span>{assignFeedback}</span>
               </div>
             )}
 
             <div className="space-y-3 text-xs">
               <p className="text-app-text-secondary leading-relaxed">
-                Confirm formal assignment of this donor for request{' '}
+                Confirm formal assignment of this candidate for emergency request{' '}
                 <strong className="text-app-text font-mono">{activeReq?.referenceCode}</strong>.
-                This updates units coordinated, verifies safety caps, and dispatches hospital coordination details to the donor.
+                In production, this executes the atomic database procedure (<code className="font-mono text-[11px]">assign_donor_atomic</code>) to safely serialize concurrent claims, verify clinical capacity caps, and dispatch hospital instructions.
               </p>
 
               <div>
-                <label className="text-app-text font-bold block mb-1">Units to Assign</label>
+                <label htmlFor="assign-units-select" className="text-app-text font-bold block mb-1">
+                  Units to Assign
+                </label>
                 <select
+                  id="assign-units-select"
                   value={assignUnits}
                   onChange={(e) => setAssignUnits(Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg border border-app-border bg-app-surface text-app-text font-bold"
+                  className="w-full p-2.5 rounded-lg border border-app-border bg-app-surface text-app-text font-bold focus:outline-none focus:ring-1 focus:ring-brand"
                 >
                   <option value={1}>1 Unit</option>
                   {activeReq && activeReq.unitsRequired - activeReq.unitsCoordinated >= 2 && (
@@ -121,18 +133,18 @@ export const CoordinatorView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-app-border">
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-app-border">
               <button
                 type="button"
                 onClick={() => setAssignModalDonorId(null)}
-                className="py-2 px-4 rounded-lg border border-app-border text-xs font-semibold text-app-text hover:bg-app-muted"
+                className="py-2 px-3.5 rounded-lg border border-app-border text-xs font-semibold text-app-text hover:bg-app-muted transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleExecuteAssignment}
-                className="py-2 px-5 rounded-lg bg-brand hover:bg-brand-dark text-xs font-bold text-white shadow-xs transition-colors"
+                className="py-2 px-4 rounded-lg bg-brand hover:bg-brand-hover text-xs font-bold text-white shadow-xs transition-colors"
               >
                 Confirm Assignment
               </button>
@@ -141,34 +153,34 @@ export const CoordinatorView: React.FC = () => {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-app-text tracking-tight flex items-center gap-2">
-            <Activity className="w-6 h-6 text-brand" />
-            <span>Coordinator Control Room</span>
-          </h1>
-          <p className="text-xs text-app-text-secondary mt-0.5">
-            Operational dashboard for managing emergencies, shortage mitigations, and atomic donor assignments.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
+      {/* Unified Healthcare Header */}
+      <WorkspaceHeader
+        breadcrumbs={[
+          { label: 'CareLoop', href: '/' },
+          { label: 'Coordinator Dispatch Console' },
+        ]}
+        roleBadge={{
+          label: 'Clinical Coordinator',
+          variant: 'brand',
+          icon: Activity,
+        }}
+        title="Emergency Dispatch & Shortage Mitigation"
+        description="Operational console for triaging emergency calls, reviewing algorithmic compatibility rankings, and executing atomic donor allocations."
+        statusBadge={{
+          label: isOffline ? 'Offline Mode' : 'Automated Dispatch Active',
+          live: !isOffline,
+        }}
+        actions={
           <button
             type="button"
             onClick={() => navigate('/communication')}
-            className="bg-brand-light text-brand hover:bg-brand/20 border border-brand/30 px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
+            className="bg-brand-light text-brand hover:bg-brand/20 border border-brand/30 px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors shadow-xs"
           >
-            <MessageSquare className="w-3.5 h-3.5" />
+            <MessageSquare className="w-4 h-4" />
             <span>Communication Hub</span>
           </button>
-
-          <span className="text-xs bg-app-text text-white font-mono px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-xs">
-            <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-            <span>DISPATCH ACTIVE</span>
-          </span>
-        </div>
-      </div>
+        }
+      />
 
       {/* KPI Stats Overview */}
       <KpiOverview requests={requests} />
@@ -186,10 +198,10 @@ export const CoordinatorView: React.FC = () => {
             key={tab.key}
             type="button"
             onClick={() => setActiveTabFilter(tab.key)}
-            className={`py-1.5 px-3 rounded-md transition-all whitespace-nowrap ${
+            className={`py-1.5 px-3.5 rounded-md transition-all whitespace-nowrap ${
               activeTabFilter === tab.key
-                ? 'bg-brand text-white shadow-xs'
-                : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted'
+                ? 'bg-brand text-white shadow-xs font-bold'
+                : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted font-medium'
             }`}
           >
             {tab.label}
@@ -205,7 +217,9 @@ export const CoordinatorView: React.FC = () => {
             <h2 className="text-xs font-bold uppercase tracking-wider text-app-text">
               Emergency Coordination Matrix
             </h2>
-            <span className="text-xs text-app-text-secondary">Click a record to inspect controls</span>
+            <span className="text-xs text-app-text-secondary font-medium">
+              Click any record to inspect active controls
+            </span>
           </div>
 
           <EmergencyMatrix
@@ -218,9 +232,9 @@ export const CoordinatorView: React.FC = () => {
 
         {/* Selected Request Detail Drawer (1 Column) */}
         {activeReq ? (
-          <div className="bg-app-surface rounded-xl border border-app-border shadow-card p-5 space-y-5">
+          <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle p-5 sm:p-6 space-y-5">
             <div className="flex items-start justify-between border-b border-app-border pb-3">
-              <div>
+              <div className="space-y-0.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-app-text-secondary">
                   Active Control Console
                 </span>
@@ -280,12 +294,12 @@ export const CoordinatorView: React.FC = () => {
                   onClick={() =>
                     verifyAndFulfillRequest(
                       activeReq.id,
-                      bloodCentres[0].id,
+                      bloodCentres[0]?.id || 'bc-1',
                       activeReq.unitsRequired - activeReq.unitsCoordinated
                     )
                   }
                   disabled={activeReq.unitsCoordinated >= activeReq.unitsRequired}
-                  className="w-full py-2.5 px-3 rounded-lg bg-brand hover:bg-brand-dark text-white font-bold text-xs transition-colors disabled:opacity-50 shadow-xs"
+                  className="w-full py-2.5 px-3 rounded-lg bg-brand hover:bg-brand-hover text-white font-bold text-xs transition-colors disabled:opacity-50 shadow-xs"
                 >
                   Fulfill All
                 </button>
@@ -305,14 +319,21 @@ export const CoordinatorView: React.FC = () => {
             <div className="space-y-2 border-t border-app-border pt-3 text-xs">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-app-text">
-                  Candidate Responders ({matches.length})
+                  Evaluation Roster ({matches.length})
                 </span>
-                <span className="text-[10px] text-app-text-secondary font-semibold">Algorithmic Match</span>
+                <span className="text-[10px] text-warning-dark bg-warning-light border border-warning-border px-2 py-0.5 rounded font-semibold">
+                  Simulated Candidates
+                </span>
               </div>
+              <p className="text-[11px] text-app-text-secondary leading-normal">
+                Algorithmically ranked candidates for dispatch evaluation. Live production matching targets registered volunteer profiles within active radius.
+              </p>
 
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                 {matches.length === 0 ? (
-                  <div className="py-4 text-center text-app-text-secondary">No compatible donors in current radius.</div>
+                  <div className="py-4 text-center text-app-text-secondary">
+                    No compatible candidates in current search radius.
+                  </div>
                 ) : (
                   matches.map((m) => (
                     <div
@@ -325,7 +346,9 @@ export const CoordinatorView: React.FC = () => {
                       </div>
                       <p className="text-[11px] text-app-text-secondary">{m.matchReason}</p>
                       <div className="flex items-center justify-between pt-1">
-                        <span className="text-[10px] text-app-text-secondary">Score: {m.matchScore}/100</span>
+                        <span className="text-[10px] text-app-text-secondary">
+                          Score: {m.matchScore}/100 • Evaluation Profile
+                        </span>
                         <button
                           type="button"
                           onClick={() => {
@@ -333,9 +356,9 @@ export const CoordinatorView: React.FC = () => {
                             setAssignUnits(1);
                           }}
                           disabled={activeReq.unitsCoordinated >= activeReq.unitsRequired}
-                          className="bg-brand hover:bg-brand-dark text-white font-bold text-[11px] px-2.5 py-1 rounded-md transition-colors disabled:opacity-50"
+                          className="bg-brand hover:bg-brand-hover text-white font-bold text-[11px] px-2.5 py-1 rounded-md transition-colors disabled:opacity-50"
                         >
-                          Assign Donor
+                          Assign Candidate
                         </button>
                       </div>
                     </div>

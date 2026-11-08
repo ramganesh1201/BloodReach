@@ -28,6 +28,7 @@ export interface DonorEligibilityCheck {
   reason?: string;
   nextEligibleDate?: string;
   daysRemaining?: number;
+  status?: 'ELIGIBLE' | 'DEFERRED' | 'UNDETERMINED';
 }
 
 export interface PotentialResponderMatch {
@@ -106,14 +107,43 @@ const WHOLE_BLOOD_COMPATIBILITY: Record<BloodGroup, BloodGroup[]> = {
 };
 
 // ============================================================================
-// DONATION INTERVALS (DAYS)
+// DONATION INTERVALS (DAYS) — NBTC 2023 CLINICAL GUIDELINES
+// Standardized to Government of India National Blood Transfusion Council (NBTC)
+// Transfusion Medicine Technical Manual (Third Edition, 2023):
+// - Whole Blood (Male): 90 days (3 months)
+// - Whole Blood (Female): 120 days (4 months)
+// - Packed RBC (2-unit automated apheresis): 112 days (16 weeks)
+// - Platelets (Apheresis): 14 days (every 2 weeks)
+// - Plasma (Apheresis): 28 days (every 4 weeks)
+// - Minimum Haemoglobin: 12.5 g/dL for both sexes (screened at blood centre)
 // ============================================================================
-const DONATION_INTERVAL_DAYS: Record<BloodComponent, number> = {
-  'Whole Blood': 56, // Standard 8 weeks (or 90 days in some guidelines)
-  'Packed RBC': 112, // 16 weeks for automated 2-unit RBC
-  'Platelets': 14,   // Apheresis platelets every 2 weeks
-  'Plasma': 28,      // Apheresis plasma every 4 weeks
+export const NBTC_2023_INTERVALS = {
+  WHOLE_BLOOD_MALE_DAYS: 90,
+  WHOLE_BLOOD_FEMALE_DAYS: 120,
+  PACKED_RBC_DAYS: 112,
+  PLATELETS_DAYS: 14,
+  PLASMA_DAYS: 28,
+  MIN_HEMOGLOBIN_GDL: 12.5,
+} as const;
+
+export const DONATION_INTERVAL_DAYS: Record<BloodComponent, number> = {
+  'Whole Blood': 90, // Baseline male interval (female requires 120 days per NBTC 2023)
+  'Packed RBC': 112,
+  'Platelets': 14,
+  'Plasma': 28,
 };
+
+/**
+ * Normalizes biological sex/gender from donor profile.
+ * Only returns 'male' or 'female' where the stored field has a clear, reliable mapping.
+ * Returns null if missing, unspecified, or ambiguous. Never infers from name, email, or other data.
+ */
+export function normalizeDonorGender(donor: Donor): 'male' | 'female' | null {
+  const raw = (donor.gender || donor.sex || '').trim().toLowerCase();
+  if (raw === 'male' || raw === 'm') return 'male';
+  if (raw === 'female' || raw === 'f') return 'female';
+  return null;
+}
 
 // ============================================================================
 // HAVERSINE DISTANCE FORMULA
@@ -184,25 +214,55 @@ export function evaluateDonorEligibility(
     }
   }
 
-  // 5. Donation Interval Evaluation
+  // 5. Donation Interval Evaluation (NBTC 2023 Criteria)
   if (donor.lastDonatedAt) {
     const lastDate = new Date(donor.lastDonatedAt);
     const componentLast = donor.lastDonatedComponent || 'Whole Blood';
-    const requiredIntervalDays = DONATION_INTERVAL_DAYS[componentLast] || 56;
-    const nextDate = new Date(lastDate.getTime() + requiredIntervalDays * 24 * 3600 * 1000);
 
-    if (nextDate > now) {
-      const daysRemaining = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
-      return {
-        isEligible: false,
-        reason: `Inter-donation interval active (${daysRemaining} days remaining for ${componentLast}).`,
-        nextEligibleDate: nextDate.toISOString(),
-        daysRemaining,
-      };
+    if (componentLast === 'Whole Blood') {
+      const normalizedGender = normalizeDonorGender(donor);
+      if (!normalizedGender) {
+        return {
+          isEligible: false,
+          reason: 'Unable to determine — blood centre assessment required',
+          status: 'UNDETERMINED',
+        };
+      }
+
+      const requiredIntervalDays =
+        normalizedGender === 'male'
+          ? NBTC_2023_INTERVALS.WHOLE_BLOOD_MALE_DAYS
+          : NBTC_2023_INTERVALS.WHOLE_BLOOD_FEMALE_DAYS;
+      const nextDate = new Date(lastDate.getTime() + requiredIntervalDays * 24 * 3600 * 1000);
+
+      if (nextDate > now) {
+        const daysRemaining = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
+        return {
+          isEligible: false,
+          reason: `Inter-donation interval active (${daysRemaining} days remaining for Whole Blood (${requiredIntervalDays}-day NBTC ${normalizedGender} interval)).`,
+          nextEligibleDate: nextDate.toISOString(),
+          daysRemaining,
+          status: 'DEFERRED',
+        };
+      }
+    } else {
+      const requiredIntervalDays = DONATION_INTERVAL_DAYS[componentLast] || 90;
+      const nextDate = new Date(lastDate.getTime() + requiredIntervalDays * 24 * 3600 * 1000);
+
+      if (nextDate > now) {
+        const daysRemaining = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
+        return {
+          isEligible: false,
+          reason: `Inter-donation interval active (${daysRemaining} days remaining for ${componentLast}).`,
+          nextEligibleDate: nextDate.toISOString(),
+          daysRemaining,
+          status: 'DEFERRED',
+        };
+      }
     }
   }
 
-  return { isEligible: true };
+  return { isEligible: true, status: 'ELIGIBLE' };
 }
 
 // ============================================================================
@@ -262,8 +322,8 @@ export function findPotentialResponders(
 
     // 2. Clinical Eligibility & Interval Check
     const eligibility = evaluateDonorEligibility(donor, request.component);
-    // If not eligible due to strict interval or medical deferral, exclude from active emergency call
-    if (!eligibility.isEligible && eligibility.daysRemaining && eligibility.daysRemaining > 0) {
+    // If not eligible due to strict interval, undetermined sex interval, or medical deferral, exclude from active emergency call
+    if (!eligibility.isEligible) {
       continue;
     }
 

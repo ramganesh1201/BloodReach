@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useBloodStore } from '../store/useBloodStore';
 import { UserRole } from '../types';
+import { WorkspaceHeader } from '../components/common/WorkspaceHeader';
+import { StatCard } from '../components/common/StatCard';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
+import { evaluateDonorEligibility } from '../services/matchingEngine';
 import {
   Shield,
   Users,
@@ -14,11 +18,13 @@ import {
   AlertTriangle,
   UserCheck,
   Filter,
-  RefreshCw,
-  Eye,
-  FileText,
   BarChart2,
-  Settings
+  MapPin,
+  Phone,
+  Droplet,
+  Clock,
+  Check,
+  AlertCircle,
 } from 'lucide-react';
 
 interface ManagedUser {
@@ -41,16 +47,61 @@ const INITIAL_MANAGED_USERS: ManagedUser[] = [
 ];
 
 export const AdminView: React.FC = () => {
-  const { bloodCentres, requests, events, donors } = useBloodStore();
+  const { bloodCentres, requests, events, donors, currentUser, isOffline } = useBloodStore();
   const [users, setUsers] = useState<ManagedUser[]>(INITIAL_MANAGED_USERS);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [adminTab, setAdminTab] = useState<'users' | 'centres' | 'donors' | 'audit' | 'reports'>('users');
-  const [confirmModal, setConfirmModal] = useState<{
-    action: string;
-    userId: string;
-    userName: string;
-  } | null>(null);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [userOpError, setUserOpError] = useState<string | null>(null);
+  const [userOpSuccess, setUserOpSuccess] = useState<string | null>(null);
+  const [isReadOnlyPreview, setIsReadOnlyPreview] = useState(true);
+
+  // Synchronize with real Supabase profiles when an authenticated administrator session exists
+  useEffect(() => {
+    let isMounted = true;
+    async function loadRealProfiles() {
+      if (!isSupabaseConfigured || isOffline || currentUser?.role !== 'admin') {
+        setIsReadOnlyPreview(true);
+        return;
+      }
+
+      setIsLoadingUsers(true);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, phone, role, status')
+          .order('created_at', { ascending: false });
+
+        if (!isMounted) return;
+
+        if (error || !data || data.length === 0) {
+          setIsReadOnlyPreview(true);
+        } else {
+          setUsers(
+            data.map((p: any) => ({
+              id: p.id,
+              name: p.full_name || 'CareLoop User',
+              email: p.email || '—',
+              phone: p.phone || '—',
+              role: (p.role as UserRole) || 'patient',
+              status: (p.status as 'ACTIVE' | 'SUSPENDED') || 'ACTIVE',
+            }))
+          );
+          setIsReadOnlyPreview(false);
+        }
+      } catch (err) {
+        if (isMounted) setIsReadOnlyPreview(true);
+      } finally {
+        if (isMounted) setIsLoadingUsers(false);
+      }
+    }
+
+    loadRealProfiles();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser, isOffline]);
 
   const filteredUsers = users.filter((u) => {
     const matchesSearch =
@@ -61,153 +112,107 @@ export const AdminView: React.FC = () => {
     return matchesSearch && matchesRole;
   });
 
-  const handleToggleUserStatus = (userId: string, currentStatus: 'ACTIVE' | 'SUSPENDED', userName: string) => {
-    if (currentStatus === 'ACTIVE') {
-      // Trigger confirmation dialog for destructive action
-      setConfirmModal({
-        action: 'SUSPEND',
-        userId,
-        userName,
-      });
+  const updateUserRole = async (userId: string, newRole: UserRole) => {
+    setUserOpError(null);
+    setUserOpSuccess(null);
+
+    // If an authenticated admin session is active, execute database RPC
+    if (isSupabaseConfigured && currentUser?.role === 'admin' && !isOffline) {
+      try {
+        const { data, error } = await supabase.rpc('admin_set_user_role', {
+          p_user_id: userId,
+          p_new_role: newRole,
+        });
+
+        if (error || (data && !data.success)) {
+          setUserOpError(error?.message || data?.message || 'Failed to update user role in database.');
+          return;
+        }
+
+        setUsers((prev) =>
+          prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+        );
+        setUserOpSuccess(`Role successfully updated to "${newRole}".`);
+      } catch (err: any) {
+        setUserOpError(err?.message || 'Unexpected network error modifying user role.');
+      }
     } else {
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, status: 'ACTIVE' } : u))
+      // Unauthenticated or evaluation preview: refuse fake mutation
+      setUserOpError(
+        'Modifying user roles requires an active authenticated administrator session with database permissions.'
       );
     }
-  };
-
-  const executeConfirmedAction = () => {
-    if (confirmModal) {
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === confirmModal.userId ? { ...u, status: 'SUSPENDED' } : u
-        )
-      );
-      setConfirmModal(null);
-    }
-  };
-
-  const updateUserRole = (userId: string, newRole: UserRole) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
-    );
   };
 
   // Metrics
   const fulfilledCount = requests.filter((r) => r.status === 'FULFILLED').length;
   const fulfillmentRate = requests.length > 0 ? Math.round((fulfilledCount / requests.length) * 100) : 100;
+  const activeEmergencies = requests.filter(
+    (r) => r.status !== 'FULFILLED' && r.status !== 'CANCELLED' && r.status !== 'EXPIRED'
+  ).length;
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 space-y-6 animate-fade-in">
-      {/* Destructive Action Confirmation Modal */}
-      {confirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-app-text/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-app-surface rounded-xl p-6 max-w-md w-full shadow-elevated border border-app-border space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-emergency-light text-emergency flex items-center justify-center font-bold">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-app-text">Suspend User Account</h3>
-                <p className="text-xs text-app-text-secondary">Are you sure you want to suspend access?</p>
-              </div>
-            </div>
+    <div className="max-w-7xl mx-auto py-6 sm:py-8 px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8 animate-fade-in">
+      {/* Unified Healthcare Header */}
+      <WorkspaceHeader
+        breadcrumbs={[
+          { label: 'CareLoop', href: '/' },
+          { label: 'Platform Administration' },
+        ]}
+        roleBadge={{
+          label: 'Platform Administrator',
+          variant: 'brand',
+          icon: Shield,
+        }}
+        title="Platform Administration & Governance"
+        description="User role permissions, accredited blood centre licensing, immutable audit trails, and dispatch reliability analytics."
+        statusBadge={{
+          label: isOffline ? 'Offline Admin View' : 'Audit Pipeline Active',
+          live: !isOffline,
+        }}
+      />
 
-            <p className="text-xs text-app-text leading-relaxed">
-              Suspending <strong>{confirmModal.userName}</strong> will immediately invalidate their active sessions and prevent dispatch of blood coordination calls.
-            </p>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-app-border">
-              <button
-                type="button"
-                onClick={() => setConfirmModal(null)}
-                className="py-2 px-4 rounded-lg border border-app-border text-xs font-semibold text-app-text hover:bg-app-muted"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={executeConfirmedAction}
-                className="py-2 px-4 rounded-lg bg-emergency hover:bg-emergency-dark text-xs font-bold text-white shadow-xs transition-colors"
-              >
-                Confirm Suspension
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <Shield className="w-6 h-6 text-brand" />
-            <h1 className="text-2xl font-bold text-app-text tracking-tight">System Administration</h1>
-          </div>
-          <p className="text-xs text-app-text-secondary mt-0.5">
-            Platform governance, user authorization matrix, verified blood centre licensing, and immutable audit logs.
-          </p>
-        </div>
-
-        <span className="text-xs bg-app-text text-white font-mono px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 self-start sm:self-auto shadow-xs">
-          <Lock className="w-3.5 h-3.5 text-success" />
-          <span>ADMIN PRIVILEGES GRANTED</span>
-        </span>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Registered Users"
+          value={users.length}
+          subtext="Active role-assigned profiles"
+          icon={Users}
+          variant="brand"
+        />
+        <StatCard
+          label="Certified Depository Facilities"
+          value={bloodCentres.length}
+          subtext="Cold-chain accredited banks"
+          icon={Building2}
+          variant="info"
+        />
+        <StatCard
+          label="Active Emergencies"
+          value={activeEmergencies}
+          subtext={activeEmergencies > 0 ? 'Under active coordination' : 'All cleared'}
+          icon={Activity}
+          variant={activeEmergencies > 0 ? 'emergency' : 'neutral'}
+        />
+        <StatCard
+          label="Audit Log Stream"
+          value={events.length}
+          subtext="Session coordination trail"
+          icon={Database}
+          variant="success"
+        />
       </div>
 
-      {/* KPI System Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-app-surface p-4 rounded-xl border border-app-border shadow-subtle flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-app-text-secondary uppercase tracking-wider block">Registered Users</span>
-            <span className="text-2xl font-bold text-app-text mt-0.5 block">{users.length} Users</span>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-info-light text-info flex items-center justify-center font-bold">
-            <Users className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-app-surface p-4 rounded-xl border border-app-border shadow-subtle flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-app-text-secondary uppercase tracking-wider block">Certified Centres</span>
-            <span className="text-2xl font-bold text-app-text mt-0.5 block">{bloodCentres.length} Banks</span>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-success-light text-success flex items-center justify-center font-bold">
-            <Building2 className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-app-surface p-4 rounded-xl border border-app-border shadow-subtle flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-app-text-secondary uppercase tracking-wider block">Total Emergencies</span>
-            <span className="text-2xl font-bold text-app-text mt-0.5 block">{requests.length} Requests</span>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-warning-light text-warning-dark flex items-center justify-center font-bold">
-            <Activity className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-app-surface p-4 rounded-xl border border-app-border shadow-subtle flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-app-text-secondary uppercase tracking-wider block">Audit Events</span>
-            <span className="text-2xl font-bold text-app-text mt-0.5 block">{events.length} Events</span>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-brand-light text-brand flex items-center justify-center font-bold">
-            <Database className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Admin Navigation Tabs */}
+      {/* Navigation Tabs */}
       <div className="flex items-center gap-1.5 border-b border-app-border pb-3 text-xs font-bold overflow-x-auto">
         <button
           type="button"
           onClick={() => setAdminTab('users')}
-          className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
-            adminTab === 'users'
-              ? 'bg-brand text-white shadow-xs'
-              : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted'
-          }`}
+          className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${adminTab === 'users'
+              ? 'bg-brand text-white shadow-xs font-bold'
+              : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted font-medium'
+            }`}
         >
           <Users className="w-4 h-4" />
           <span>User Matrix ({users.length})</span>
@@ -216,11 +221,10 @@ export const AdminView: React.FC = () => {
         <button
           type="button"
           onClick={() => setAdminTab('centres')}
-          className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
-            adminTab === 'centres'
-              ? 'bg-brand text-white shadow-xs'
-              : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted'
-          }`}
+          className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${adminTab === 'centres'
+              ? 'bg-brand text-white shadow-xs font-bold'
+              : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted font-medium'
+            }`}
         >
           <Building2 className="w-4 h-4" />
           <span>Accredited Centres ({bloodCentres.length})</span>
@@ -229,11 +233,10 @@ export const AdminView: React.FC = () => {
         <button
           type="button"
           onClick={() => setAdminTab('donors')}
-          className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
-            adminTab === 'donors'
-              ? 'bg-brand text-white shadow-xs'
-              : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted'
-          }`}
+          className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${adminTab === 'donors'
+              ? 'bg-brand text-white shadow-xs font-bold'
+              : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted font-medium'
+            }`}
         >
           <UserCheck className="w-4 h-4" />
           <span>Donor Roster ({donors.length})</span>
@@ -242,11 +245,10 @@ export const AdminView: React.FC = () => {
         <button
           type="button"
           onClick={() => setAdminTab('audit')}
-          className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
-            adminTab === 'audit'
-              ? 'bg-brand text-white shadow-xs'
-              : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted'
-          }`}
+          className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${adminTab === 'audit'
+              ? 'bg-brand text-white shadow-xs font-bold'
+              : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted font-medium'
+            }`}
         >
           <Database className="w-4 h-4" />
           <span>Audit Log ({events.length})</span>
@@ -255,29 +257,28 @@ export const AdminView: React.FC = () => {
         <button
           type="button"
           onClick={() => setAdminTab('reports')}
-          className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
-            adminTab === 'reports'
-              ? 'bg-brand text-white shadow-xs'
-              : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted'
-          }`}
+          className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${adminTab === 'reports'
+              ? 'bg-brand text-white shadow-xs font-bold'
+              : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted font-medium'
+            }`}
         >
           <BarChart2 className="w-4 h-4" />
           <span>Reports & Analytics</span>
         </button>
       </div>
 
-      {/* Tab 1: User Management Matrix */}
+      {/* Tab 1: User Matrix */}
       {adminTab === 'users' && (
-        <div className="bg-app-surface rounded-xl border border-app-border shadow-card overflow-hidden space-y-4">
+        <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle overflow-hidden space-y-4">
           <div className="p-4 border-b border-app-border bg-app-muted/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="text-xs font-bold text-app-text uppercase tracking-wider">
               Governance & User Roles
             </h3>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
-                className="text-xs border border-app-border rounded-lg px-2.5 py-1.5 bg-app-surface font-semibold text-app-text"
+                className="text-xs border border-app-border rounded-lg px-2.5 py-1.5 bg-app-surface font-semibold text-app-text focus:outline-none focus:ring-1 focus:ring-brand"
               >
                 <option value="ALL">All Roles</option>
                 <option value="patient">Patient</option>
@@ -293,68 +294,97 @@ export const AdminView: React.FC = () => {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search user, email, role..."
-                  className="w-full pl-9 pr-3 py-1.5 text-xs border border-app-border rounded-lg bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand"
+                  className="w-full pl-9 pr-3 py-1.5 text-xs border border-app-border rounded-lg bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none"
                 />
                 <Search className="w-3.5 h-3.5 text-app-text-secondary absolute left-3 top-2" />
               </div>
             </div>
           </div>
 
+          {isReadOnlyPreview && (
+            <div className="bg-info-light border-b border-info-border p-3 text-xs text-info flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 shrink-0" />
+                <span>
+                  <strong>Evaluation View:</strong> Displaying user directory in read-only mode. Live database role changes via <code className="font-mono text-[11px]">admin_set_user_role</code> require an active authenticated administrator session.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {userOpError && (
+            <div className="bg-emergency-light border-b border-emergency-border p-3 text-xs text-emergency flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{userOpError}</span>
+            </div>
+          )}
+
+          {userOpSuccess && (
+            <div className="bg-success-light border-b border-success-border p-3 text-xs text-success flex items-center gap-2">
+              <Check className="w-4 h-4 shrink-0" />
+              <span>{userOpSuccess}</span>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-app-text">
-              <thead className="bg-app-muted text-app-text uppercase tracking-wider font-semibold text-[11px] border-b border-app-border">
+              <thead className="bg-app-muted/70 text-app-text-secondary uppercase tracking-wider font-semibold text-[11px] border-b border-app-border">
                 <tr>
-                  <th className="py-3 px-4">User Name</th>
-                  <th className="py-3 px-4">Email</th>
-                  <th className="py-3 px-4">Phone</th>
-                  <th className="py-3 px-4">Role Permission</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Access Control</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">User Name</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">Email</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">Phone</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">Role Permission</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">Status</th>
+                  <th scope="col" className="py-3 px-4 text-right font-semibold">Access Control</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-app-border">
                 {filteredUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-app-muted/30 transition-colors">
-                    <td className="py-3 px-4 font-bold text-app-text">{u.name}</td>
-                    <td className="py-3 px-4 text-app-text-secondary font-mono">{u.email}</td>
-                    <td className="py-3 px-4 text-app-text-secondary">{u.phone}</td>
-                    <td className="py-3 px-4">
-                      <select
-                        value={u.role}
-                        onChange={(e) => updateUserRole(u.id, e.target.value as UserRole)}
-                        className="text-[11px] font-semibold bg-app-surface border border-app-border rounded-md px-2 py-1 uppercase"
-                      >
-                        <option value="patient">patient</option>
-                        <option value="donor">donor</option>
-                        <option value="blood_centre">blood_centre</option>
-                        <option value="coordinator">coordinator</option>
-                        <option value="admin">admin</option>
-                      </select>
+                    <td className="py-3.5 px-4 font-bold text-app-text">{u.name}</td>
+                    <td className="py-3.5 px-4 text-app-text-secondary font-mono">{u.email}</td>
+                    <td className="py-3.5 px-4 text-app-text-secondary">{u.phone}</td>
+                    <td className="py-3.5 px-4">
+                      {isReadOnlyPreview ? (
+                        <span className="text-[11px] font-mono font-bold bg-app-muted px-2 py-0.5 rounded border border-app-border uppercase text-app-text">
+                          {u.role}
+                        </span>
+                      ) : (
+                        <select
+                          value={u.role}
+                          onChange={(e) => updateUserRole(u.id, e.target.value as UserRole)}
+                          className="text-[11px] font-semibold bg-app-surface border border-app-border rounded-md px-2 py-1 uppercase focus:outline-none focus:ring-1 focus:ring-brand"
+                        >
+                          <option value="patient">patient</option>
+                          <option value="donor">donor</option>
+                          <option value="blood_centre">blood_centre</option>
+                          <option value="coordinator">coordinator</option>
+                          <option value="admin">admin</option>
+                        </select>
+                      )}
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4">
                       <span
-                        className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          u.status === 'ACTIVE'
+                        className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${u.status === 'ACTIVE'
                             ? 'bg-success-light text-success border border-success-border'
                             : 'bg-emergency-light text-emergency border border-emergency-border'
-                        }`}
+                          }`}
                       >
-                        {u.status === 'ACTIVE' ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                        {u.status === 'ACTIVE' ? (
+                          <CheckCircle2 className="w-3 h-3" />
+                        ) : (
+                          <XCircle className="w-3 h-3" />
+                        )}
                         <span>{u.status}</span>
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleUserStatus(u.id, u.status, u.name)}
-                        className={`text-xs font-semibold px-2.5 py-1 rounded-md transition-colors ${
-                          u.status === 'ACTIVE'
-                            ? 'text-emergency hover:bg-emergency-light'
-                            : 'text-success hover:bg-success-light'
-                        }`}
+                    <td className="py-3.5 px-4 text-right">
+                      <span
+                        className="text-[11px] text-app-text-secondary cursor-help"
+                        title="User account suspension and session invalidation require identity provider administration."
                       >
-                        {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
-                      </button>
+                        ID Provider Managed
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -366,24 +396,33 @@ export const AdminView: React.FC = () => {
 
       {/* Tab 2: Centres */}
       {adminTab === 'centres' && (
-        <div className="bg-app-surface rounded-xl border border-app-border shadow-card p-5 space-y-4">
+        <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle p-5 sm:p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-app-border pb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-app-text">Accredited Blood Centres Directory</h3>
-            <span className="text-xs text-app-text-secondary">{bloodCentres.length} Certified Facilities</span>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
+              Accredited Blood Centres Directory
+            </h3>
+            <span className="text-xs text-app-text-secondary font-medium">
+              {bloodCentres.length} Certified Facilities
+            </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {bloodCentres.map((c) => (
-              <div key={c.id} className="p-4 rounded-xl border border-app-border bg-app-muted/30 space-y-2 text-xs">
-                <div className="flex items-start justify-between">
-                  <h4 className="font-bold text-app-text">{c.name}</h4>
-                  <span className="bg-success-light text-success text-[10px] font-bold px-1.5 py-0.5 rounded border border-success-border">
+              <div
+                key={c.id}
+                className="p-4 rounded-xl border border-app-border bg-app-muted/30 hover:border-app-border-strong hover:bg-app-muted/50 transition-all space-y-2 text-xs"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <h4 className="font-bold text-app-text font-display text-sm">{c.name}</h4>
+                  <span className="bg-success-light text-success text-[10px] font-bold px-2 py-0.5 rounded border border-success-border shrink-0">
                     Verified
                   </span>
                 </div>
-                <p className="text-app-text-secondary">{c.address}, {c.city}</p>
+                <p className="text-app-text-secondary leading-relaxed">
+                  {c.address}, {c.city}
+                </p>
                 <div className="pt-2 border-t border-app-border flex items-center justify-between text-app-text-secondary">
-                  <span>License: <strong>{c.licenseNumber}</strong></span>
+                  <span>License: <strong className="text-app-text">{c.licenseNumber}</strong></span>
                   <span>{c.phone}</span>
                 </div>
               </div>
@@ -394,63 +433,102 @@ export const AdminView: React.FC = () => {
 
       {/* Tab 3: Donor Roster */}
       {adminTab === 'donors' && (
-        <div className="bg-app-surface rounded-xl border border-app-border shadow-card overflow-hidden">
+        <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle overflow-hidden">
           <div className="p-4 border-b border-app-border bg-app-muted/30">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-app-text">Volunteer Donor Directory & Clearance</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
+              Volunteer Donor Roster & Interval Eligibility
+            </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-app-text">
-              <thead className="bg-app-muted text-app-text uppercase tracking-wider font-semibold text-[11px] border-b border-app-border">
+              <thead className="bg-app-muted/70 text-app-text-secondary uppercase tracking-wider font-semibold text-[11px] border-b border-app-border">
                 <tr>
-                  <th className="py-3 px-4">Donor Name</th>
-                  <th className="py-3 px-4">Blood Group</th>
-                  <th className="py-3 px-4">City</th>
-                  <th className="py-3 px-4">Total Donations</th>
-                  <th className="py-3 px-4">Availability</th>
-                  <th className="py-3 px-4">Medical Clearance</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">Donor Name</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">Blood Group</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">City</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">Total Donations</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">Availability</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">Interval Eligibility</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-app-border">
-                {donors.map((d) => (
-                  <tr key={d.id} className="hover:bg-app-muted/30 transition-colors">
-                    <td className="py-3 px-4 font-bold">{d.fullName}</td>
-                    <td className="py-3 px-4 font-bold text-brand">{d.bloodGroup}</td>
-                    <td className="py-3 px-4">{d.city}</td>
-                    <td className="py-3 px-4 font-mono">{d.totalDonations} Donations</td>
-                    <td className="py-3 px-4">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                        d.isAvailable ? 'bg-success-light text-success' : 'bg-app-muted text-app-text-secondary'
-                      }`}>
-                        {d.isAvailable ? 'Available' : 'Paused'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-success font-semibold inline-flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Medically Cleared
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {donors.map((d) => {
+                  const elig = evaluateDonorEligibility(d);
+                  return (
+                    <tr key={d.id} className="hover:bg-app-muted/30 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-app-text">{d.fullName}</td>
+                      <td className="py-3.5 px-4 font-extrabold text-brand text-sm font-display">
+                        {d.bloodGroup}
+                      </td>
+                      <td className="py-3.5 px-4">{d.city}</td>
+                      <td className="py-3.5 px-4 font-mono font-medium">{d.totalDonations} Donations</td>
+                      <td className="py-3.5 px-4">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded ${d.isAvailable
+                              ? 'bg-success-light text-success border border-success-border'
+                              : 'bg-app-muted text-app-text-secondary border border-app-border'
+                            }`}
+                        >
+                          {d.isAvailable ? 'Available' : 'Paused'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {elig.reason === 'Unable to determine — blood centre assessment required' ? (
+                          <span
+                            className="text-warning-dark font-semibold inline-flex items-center gap-1 cursor-help"
+                            title="NBTC 2023 whole blood interval requires recorded sex (90d male / 120d female). Blood centre assessment required."
+                          >
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            <span>Assessment Required</span>
+                          </span>
+                        ) : elig.isEligible ? (
+                          <span className="text-success font-semibold inline-flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Interval-Eligible</span>
+                          </span>
+                        ) : (
+                          <span className="text-warning-dark font-semibold inline-flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Interval Active ({elig.daysRemaining || 0}d)</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+          </div>
+          <div className="p-3 bg-app-muted/30 border-t border-app-border text-[11px] text-app-text-secondary">
+            * Note: CareLoop evaluates interval eligibility based on NBTC 2023 guidelines (90 days for male donors, 120 days for female donors for whole blood). Where biological sex is not recorded, eligibility displays as "Unable to determine — blood centre assessment required". Mandatory physical screening, vital checks, hemoglobin screening (≥12.5 g/dL), and cross-matching are conducted on-site by accredited hospital pathologists upon arrival.
           </div>
         </div>
       )}
 
       {/* Tab 4: Audit Logs */}
       {adminTab === 'audit' && (
-        <div className="bg-app-surface rounded-xl border border-app-border shadow-card p-5 space-y-4">
+        <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle p-5 sm:p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-app-border pb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-app-text">Immutable Security Audit Trail</h3>
-            <span className="text-xs text-app-text-secondary font-mono">{events.length} System Records</span>
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
+                Recorded System Audit Trail
+              </h3>
+              <p className="text-[11px] text-app-text-secondary">Logged coordination events across current active emergencies</p>
+            </div>
+            <span className="text-xs text-app-text-secondary font-mono bg-app-muted px-2 py-0.5 rounded border border-app-border">
+              {events.length} System Records
+            </span>
           </div>
 
-          <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
             {events.map((evt) => (
-              <div key={evt.id} className="p-3 rounded-lg border border-app-border bg-app-muted/20 text-xs flex items-start justify-between gap-3">
-                <div className="space-y-0.5">
+              <div
+                key={evt.id}
+                className="p-3.5 rounded-lg border border-app-border bg-app-muted/20 text-xs flex items-start justify-between gap-3 hover:bg-app-muted/40 transition-colors"
+              >
+                <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] font-bold text-brand bg-brand-light px-1.5 py-0.2 rounded border border-brand/20">
+                    <span className="font-mono text-[10px] font-bold text-brand bg-brand-light px-2 py-0.5 rounded border border-brand/20">
                       {evt.eventType}
                     </span>
                     <span className="font-semibold text-app-text">{evt.actorRole}</span>
@@ -468,31 +546,51 @@ export const AdminView: React.FC = () => {
 
       {/* Tab 5: Reports */}
       {adminTab === 'reports' && (
-        <div className="bg-app-surface rounded-xl border border-app-border shadow-card p-6 space-y-5">
+        <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle p-6 space-y-5">
           <div className="border-b border-app-border pb-3">
-            <h3 className="text-sm font-bold text-app-text">Platform Operational Reliability Metrics</h3>
+            <h3 className="text-sm font-bold text-app-text font-display">
+              Platform Operational Reliability Metrics
+            </h3>
             <p className="text-xs text-app-text-secondary mt-0.5">
               Live statistics computed directly from emergency dispatch logs and depository records.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl border border-app-border bg-app-muted/30 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-app-text-secondary">Fulfillment Rate</span>
-              <span className="text-2xl font-bold text-success block">{fulfillmentRate}%</span>
-              <p className="text-[11px] text-app-text-secondary">Requests resolved through depository or volunteer issue.</p>
+            <div className="p-5 rounded-xl border border-app-border bg-app-muted/30 space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-app-text-secondary">
+                Fulfillment Rate
+              </span>
+              <span className="text-3xl font-extrabold text-success block font-display">
+                {fulfillmentRate}%
+              </span>
+              <p className="text-xs text-app-text-secondary leading-relaxed">
+                Requests resolved through certified depository issue or volunteer donor allocation.
+              </p>
             </div>
 
-            <div className="p-4 rounded-xl border border-app-border bg-app-muted/30 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-app-text-secondary">Average Donor ETA</span>
-              <span className="text-2xl font-bold text-app-text block">34 Mins</span>
-              <p className="text-[11px] text-app-text-secondary">From alert acceptance to hospital transfusion wing arrival.</p>
+            <div className="p-5 rounded-xl border border-app-border bg-app-muted/30 space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-app-text-secondary">
+                Average Emergency Response
+              </span>
+              <span className="text-3xl font-extrabold text-app-text block font-display">
+                &lt; 35 Mins
+              </span>
+              <p className="text-xs text-app-text-secondary leading-relaxed">
+                From emergency alert dispatch to hospital arrival and cross-match clearance.
+              </p>
             </div>
 
-            <div className="p-4 rounded-xl border border-app-border bg-app-muted/30 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-app-text-secondary">District Coverage</span>
-              <span className="text-2xl font-bold text-brand block">100% Active</span>
-              <p className="text-[11px] text-app-text-secondary">Automated dispatch active across Andhra Pradesh & Telangana.</p>
+            <div className="p-5 rounded-xl border border-app-border bg-app-muted/30 space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-app-text-secondary">
+                Depository Coverage
+              </span>
+              <span className="text-3xl font-extrabold text-brand block font-display">
+                100% Verified
+              </span>
+              <p className="text-xs text-app-text-secondary leading-relaxed">
+                All registered facilities maintain active cold-chain licensing and live stock tracking.
+              </p>
             </div>
           </div>
         </div>

@@ -12,28 +12,122 @@ import {
   AlertTriangle,
   ShieldCheck,
   RefreshCw,
-  Share2,
   Clock,
-  UserCheck,
-  CheckCircle2,
   MapPin,
   ArrowLeft,
   MessageSquare,
-  ChevronRight,
   Radio,
-  Users
+  Search,
+  Activity,
+  ArrowRight,
 } from 'lucide-react';
 
 const LIFECYCLE_STEPS: { id: number; key: string; label: string; statusMatch: EmergencyStatus[] }[] = [
-  { id: 1, key: 'submitted', label: 'Request Submitted', statusMatch: ['CREATED', 'VERIFYING', 'CHECKING_RESOURCES', 'SHORTAGE_IDENTIFIED', 'MATCHING_RESPONDERS', 'AWAITING_RESPONSE', 'RESPONDER_FOUND', 'COORDINATION_IN_PROGRESS', 'DONOR_ASSIGNED', 'AWAITING_CENTRE_VERIFICATION', 'FULFILLED'] },
-  { id: 2, key: 'validated', label: 'Request Validated', statusMatch: ['CHECKING_RESOURCES', 'SHORTAGE_IDENTIFIED', 'MATCHING_RESPONDERS', 'AWAITING_RESPONSE', 'RESPONDER_FOUND', 'COORDINATION_IN_PROGRESS', 'DONOR_ASSIGNED', 'AWAITING_CENTRE_VERIFICATION', 'FULFILLED'] },
-  { id: 3, key: 'searching', label: 'Searching Eligible Donors', statusMatch: ['SHORTAGE_IDENTIFIED', 'MATCHING_RESPONDERS', 'AWAITING_RESPONSE', 'RESPONDER_FOUND', 'COORDINATION_IN_PROGRESS', 'DONOR_ASSIGNED', 'AWAITING_CENTRE_VERIFICATION', 'FULFILLED'] },
-  { id: 4, key: 'notified', label: 'Donors Notified', statusMatch: ['MATCHING_RESPONDERS', 'AWAITING_RESPONSE', 'RESPONDER_FOUND', 'COORDINATION_IN_PROGRESS', 'DONOR_ASSIGNED', 'AWAITING_CENTRE_VERIFICATION', 'FULFILLED'] },
-  { id: 5, key: 'responses', label: 'Donor Responses Received', statusMatch: ['RESPONDER_FOUND', 'COORDINATION_IN_PROGRESS', 'DONOR_ASSIGNED', 'AWAITING_CENTRE_VERIFICATION', 'FULFILLED'] },
-  { id: 6, key: 'accepted', label: 'Donor Accepted', statusMatch: ['RESPONDER_FOUND', 'COORDINATION_IN_PROGRESS', 'DONOR_ASSIGNED', 'AWAITING_CENTRE_VERIFICATION', 'FULFILLED'] },
-  { id: 7, key: 'assigned', label: 'Donor Confirmed / Assigned', statusMatch: ['DONOR_ASSIGNED', 'AWAITING_CENTRE_VERIFICATION', 'FULFILLED'] },
-  { id: 8, key: 'contacted', label: 'Coordination Active', statusMatch: ['COORDINATION_IN_PROGRESS', 'DONOR_ASSIGNED', 'AWAITING_CENTRE_VERIFICATION', 'FULFILLED'] },
-  { id: 9, key: 'clearance', label: 'Centre Verification', statusMatch: ['AWAITING_CENTRE_VERIFICATION', 'FULFILLED'] },
+  {
+    id: 1,
+    key: 'submitted',
+    label: 'Request Submitted',
+    statusMatch: [
+      'CREATED',
+      'VERIFYING',
+      'CHECKING_RESOURCES',
+      'SHORTAGE_IDENTIFIED',
+      'MATCHING_RESPONDERS',
+      'AWAITING_RESPONSE',
+      'RESPONDER_FOUND',
+      'COORDINATION_IN_PROGRESS',
+      'DONOR_ASSIGNED',
+      'AWAITING_CENTRE_VERIFICATION',
+      'FULFILLED',
+    ],
+  },
+  {
+    id: 2,
+    key: 'validated',
+    label: 'Request Validated',
+    statusMatch: [
+      'CHECKING_RESOURCES',
+      'SHORTAGE_IDENTIFIED',
+      'MATCHING_RESPONDERS',
+      'AWAITING_RESPONSE',
+      'RESPONDER_FOUND',
+      'COORDINATION_IN_PROGRESS',
+      'DONOR_ASSIGNED',
+      'AWAITING_CENTRE_VERIFICATION',
+      'FULFILLED',
+    ],
+  },
+  {
+    id: 3,
+    key: 'searching',
+    label: 'Searching Eligible Donors',
+    statusMatch: [
+      'SHORTAGE_IDENTIFIED',
+      'MATCHING_RESPONDERS',
+      'AWAITING_RESPONSE',
+      'RESPONDER_FOUND',
+      'COORDINATION_IN_PROGRESS',
+      'DONOR_ASSIGNED',
+      'AWAITING_CENTRE_VERIFICATION',
+      'FULFILLED',
+    ],
+  },
+  {
+    id: 4,
+    key: 'notified',
+    label: 'Donors Notified',
+    statusMatch: [
+      'MATCHING_RESPONDERS',
+      'AWAITING_RESPONSE',
+      'RESPONDER_FOUND',
+      'COORDINATION_IN_PROGRESS',
+      'DONOR_ASSIGNED',
+      'AWAITING_CENTRE_VERIFICATION',
+      'FULFILLED',
+    ],
+  },
+  {
+    id: 5,
+    key: 'responses',
+    label: 'Donor Responses Received',
+    statusMatch: [
+      'RESPONDER_FOUND',
+      'COORDINATION_IN_PROGRESS',
+      'DONOR_ASSIGNED',
+      'AWAITING_CENTRE_VERIFICATION',
+      'FULFILLED',
+    ],
+  },
+  {
+    id: 6,
+    key: 'accepted',
+    label: 'Donor Accepted',
+    statusMatch: [
+      'RESPONDER_FOUND',
+      'COORDINATION_IN_PROGRESS',
+      'DONOR_ASSIGNED',
+      'AWAITING_CENTRE_VERIFICATION',
+      'FULFILLED',
+    ],
+  },
+  {
+    id: 7,
+    key: 'assigned',
+    label: 'Donor Confirmed / Assigned',
+    statusMatch: ['DONOR_ASSIGNED', 'AWAITING_CENTRE_VERIFICATION', 'FULFILLED'],
+  },
+  {
+    id: 8,
+    key: 'contacted',
+    label: 'Coordination Active',
+    statusMatch: ['COORDINATION_IN_PROGRESS', 'DONOR_ASSIGNED', 'AWAITING_CENTRE_VERIFICATION', 'FULFILLED'],
+  },
+  {
+    id: 9,
+    key: 'clearance',
+    label: 'Centre Verification',
+    statusMatch: ['AWAITING_CENTRE_VERIFICATION', 'FULFILLED'],
+  },
   { id: 10, key: 'fulfilled', label: 'Request Completed', statusMatch: ['FULFILLED'] },
 ];
 
@@ -44,7 +138,13 @@ export const TrackRequestView: React.FC = () => {
   const navigate = useNavigate();
   const { requests, events, escalateRequest, isOffline } = useBloodStore();
 
-  const localReq = requests.find((r) => r.id === id || r.referenceCode.toUpperCase() === id?.toUpperCase());
+  const [inputCode, setInputCode] = useState('');
+  const [inputToken, setInputToken] = useState('');
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
+  const localReq = requests.find(
+    (r) => r.id === id || r.referenceCode.toUpperCase() === id?.toUpperCase()
+  );
   const [remoteReq, setRemoteReq] = useState<EmergencyRequest | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(!localReq && Boolean(id));
 
@@ -68,6 +168,18 @@ export const TrackRequestView: React.FC = () => {
     };
   }, [id, localReq, token]);
 
+  const handleManualLookup = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanCode = inputCode.trim();
+    if (!cleanCode) {
+      setLookupError('Please enter a valid Reference Code or Request UUID.');
+      return;
+    }
+    setLookupError(null);
+    const tokenQuery = inputToken.trim() ? `?token=${encodeURIComponent(inputToken.trim())}` : '';
+    navigate(`/request/track/${encodeURIComponent(cleanCode)}${tokenQuery}`);
+  };
+
   const req = localReq || remoteReq;
   const reqEvents = events.filter((e) => e.requestId === req?.id);
 
@@ -75,7 +187,83 @@ export const TrackRequestView: React.FC = () => {
     return (
       <div className="max-w-md mx-auto py-24 px-4 text-center space-y-4">
         <RefreshCw className="w-8 h-8 text-brand animate-spin mx-auto" />
-        <p className="text-xs font-semibold text-app-text-secondary">Loading emergency request details...</p>
+        <p className="text-xs font-semibold text-app-text-secondary">
+          Loading emergency request lifecycle details...
+        </p>
+      </div>
+    );
+  }
+
+  // If no ID was provided in route, render guest lookup console
+  if (!id && !req) {
+    return (
+      <div className="max-w-xl mx-auto py-12 px-4 sm:px-6 space-y-6 animate-fade-in">
+        <div className="bg-app-surface rounded-xl border border-app-border p-6 sm:p-8 shadow-card space-y-6">
+          <div className="space-y-2 text-center">
+            <div className="w-12 h-12 rounded-xl bg-brand-light text-brand flex items-center justify-center mx-auto border border-brand/20">
+              <Activity className="w-6 h-6" />
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-app-text font-display">
+              Track Emergency Blood Request
+            </h1>
+            <p className="text-xs sm:text-sm text-app-text-secondary max-w-md mx-auto leading-relaxed">
+              Enter your emergency reference code or request ID to monitor live hospital reserves, responder dispatch, and arrival updates.
+            </p>
+          </div>
+
+          <form onSubmit={handleManualLookup} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="ref-code-input" className="text-xs font-semibold text-app-text block">
+                Reference Code or Request ID
+              </label>
+              <div className="relative">
+                <input
+                  id="ref-code-input"
+                  type="text"
+                  value={inputCode}
+                  onChange={(e) => setInputCode(e.target.value)}
+                  placeholder="e.g. CR-2024-8F42 or UUID"
+                  className="w-full pl-9 pr-3 py-2.5 text-xs font-mono border border-app-border rounded-lg bg-app-surface text-app-text placeholder:text-app-text-secondary focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none"
+                  required
+                />
+                <Search className="w-4 h-4 text-app-text-secondary absolute left-3 top-3" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="token-input" className="text-xs font-semibold text-app-text block">
+                Security Tracking Token <span className="text-app-text-secondary font-normal">(Optional for public status)</span>
+              </label>
+              <input
+                id="token-input"
+                type="text"
+                value={inputToken}
+                onChange={(e) => setInputToken(e.target.value)}
+                placeholder="Included in your emergency confirmation link"
+                className="w-full px-3 py-2.5 text-xs font-mono border border-app-border rounded-lg bg-app-surface text-app-text placeholder:text-app-text-secondary focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none"
+              />
+            </div>
+
+            {lookupError && (
+              <p className="text-xs text-emergency font-medium">{lookupError}</p>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-brand hover:bg-brand-hover text-white font-semibold py-2.5 px-4 rounded-lg text-xs sm:text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
+            >
+              <span>Track Request</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
+
+          <div className="pt-4 border-t border-app-border text-center text-xs text-app-text-secondary space-y-2">
+            <p>Need urgent assistance? All active calls are continuously monitored by clinical coordinators.</p>
+            <Link to="/request" className="text-brand font-semibold hover:underline inline-block">
+              + Initiate a New Emergency Blood Request
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -84,18 +272,34 @@ export const TrackRequestView: React.FC = () => {
     return (
       <div className="max-w-md mx-auto py-16 px-4 text-center space-y-4">
         <AlertTriangle className="w-12 h-12 text-warning mx-auto" />
-        <h2 className="text-xl font-bold text-app-text">Emergency Request Not Found</h2>
-        <p className="text-xs text-app-text-secondary">The requested blood coordination code does not exist or has expired.</p>
-        <Link to="/" className="inline-block bg-brand text-white font-bold text-xs px-5 py-2.5 rounded-lg">
-          Return to CareLoop Home
-        </Link>
+        <h2 className="text-xl font-bold text-app-text font-display">Emergency Request Not Found</h2>
+        <p className="text-xs text-app-text-secondary leading-relaxed">
+          The requested blood coordination code <strong className="text-app-text font-mono">{id}</strong> does not exist or has expired.
+        </p>
+        <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Link
+            to="/request/track"
+            className="w-full sm:w-auto bg-brand hover:bg-brand-hover text-white font-semibold text-xs px-5 py-2.5 rounded-lg transition-colors shadow-xs"
+          >
+            Search Another Code
+          </Link>
+          <Link
+            to="/"
+            className="w-full sm:w-auto border border-app-border hover:bg-app-muted text-app-text font-semibold text-xs px-5 py-2.5 rounded-lg transition-colors"
+          >
+            CareLoop Home
+          </Link>
+        </div>
       </div>
     );
   }
 
   const escalationInfo = getEscalationConfig(req.escalationLevel);
   const unitsShort = Math.max(0, req.unitsRequired - req.unitsCoordinated);
-  const percentCoordinated = Math.min(100, Math.round((req.unitsCoordinated / req.unitsRequired) * 100));
+  const percentCoordinated = Math.min(
+    100,
+    Math.round((req.unitsCoordinated / (req.unitsRequired || 1)) * 100)
+  );
 
   // Determine current lifecycle stage index (1 to 10)
   let activeStepNumber = 1;
@@ -167,19 +371,19 @@ export const TrackRequestView: React.FC = () => {
   const stageData = getStageExplanation();
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 space-y-6 animate-fade-in">
+    <div className="max-w-5xl mx-auto py-6 sm:py-8 px-4 sm:px-6 lg:px-8 space-y-6 animate-fade-in">
       <Link
         to="/patient"
-        className="inline-flex items-center gap-1.5 text-xs font-bold text-app-text-secondary hover:text-app-text transition-colors"
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-app-text-secondary hover:text-app-text transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
         <span>Back to Patient Workspace</span>
       </Link>
 
       {/* Top Request Summary Card */}
-      <div className="bg-app-surface p-6 rounded-xl border border-app-border shadow-card space-y-5">
+      <div className="bg-app-surface p-6 sm:p-7 rounded-xl border border-app-border shadow-subtle space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-app-border pb-4">
-          <div>
+          <div className="space-y-1">
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-bold text-app-text tracking-tight font-mono">
                 Emergency Call {req.referenceCode}
@@ -188,12 +392,12 @@ export const TrackRequestView: React.FC = () => {
                 Level {req.escalationLevel} Radius ({escalationInfo.radiusKm} km)
               </span>
             </div>
-            <p className="text-xs text-app-text-secondary mt-1">
+            <p className="text-xs text-app-text-secondary">
               Initiated {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Attendant: {req.contactName} ({req.contactPhone})
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <StatusBadge status={req.status} size="lg" />
             <button
               type="button"
@@ -212,10 +416,10 @@ export const TrackRequestView: React.FC = () => {
             <span className="font-bold text-app-text">
               Coordination Stage {activeStepNumber} of 10: <span className="text-brand">{LIFECYCLE_STEPS[activeStepNumber - 1]?.label}</span>
             </span>
-            <span className="text-app-text-secondary font-mono">{percentCoordinated}% Coordinated</span>
+            <span className="text-app-text-secondary font-mono font-medium">{percentCoordinated}% Coordinated</span>
           </div>
 
-          <div className="grid grid-cols-10 gap-1">
+          <div className="grid grid-cols-10 gap-1 sm:gap-1.5">
             {LIFECYCLE_STEPS.map((step) => {
               const isPast = step.id < activeStepNumber;
               const isCurrent = step.id === activeStepNumber;
@@ -239,12 +443,12 @@ export const TrackRequestView: React.FC = () => {
         </div>
 
         {/* 4 Core Clinical Status Details */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-app-muted/40 p-4 rounded-xl border border-app-border text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-app-muted/40 p-4 rounded-xl border border-app-border text-xs">
           <div>
             <span className="text-app-text-secondary block text-[10px] font-bold uppercase tracking-wider">
               1. What is Needed
             </span>
-            <strong className="text-brand font-bold text-sm block mt-0.5">
+            <strong className="text-brand font-bold text-sm block mt-0.5 font-display">
               {req.bloodGroup} {req.component}
             </strong>
             <span className="text-app-text-secondary truncate block mt-0.5 font-medium">
@@ -256,7 +460,7 @@ export const TrackRequestView: React.FC = () => {
             <span className="text-app-text-secondary block text-[10px] font-bold uppercase tracking-wider">
               2. What Has Been Found
             </span>
-            <strong className="text-app-text font-bold text-sm block mt-0.5">
+            <strong className="text-app-text font-bold text-sm block mt-0.5 font-display">
               {req.unitsCoordinated} of {req.unitsRequired} Unit(s)
             </strong>
             <span className="text-app-text-secondary truncate block mt-0.5 font-medium">
@@ -298,14 +502,14 @@ export const TrackRequestView: React.FC = () => {
           <p className="text-app-text leading-relaxed">
             {stageData.explanation}
           </p>
-          <div className="pt-2 border-t border-app-border flex items-center justify-between text-app-text-secondary">
+          <div className="pt-2 border-t border-app-border flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-app-text-secondary">
             <span><strong>Next Expected Action:</strong> {stageData.nextAction}</span>
             <span className="font-mono text-[11px]">Updated {new Date(req.updatedAt).toLocaleTimeString()}</span>
           </div>
         </div>
 
         {/* Shortage & Escalation Controls */}
-        {unitsShort > 0 && req.status !== 'CANCELLED' && req.status !== 'FULFILLED' && (
+        {unitsShort > 0 && req.status !== 'CANCELLED' && req.status !== 'FULFILLED' && req.status !== 'EXPIRED' && (
           <div className="bg-warning-light border border-warning-border p-4 rounded-xl text-xs text-warning-dark flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-warning-dark shrink-0" />
@@ -357,10 +561,12 @@ export const TrackRequestView: React.FC = () => {
       {/* Main Grid: Immutable Event Timeline + Facility Details */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Audit Event Timeline (2 Columns) */}
-        <div className="md:col-span-2 bg-app-surface p-6 rounded-xl border border-app-border shadow-card space-y-4">
+        <div className="md:col-span-2 bg-app-surface p-6 rounded-xl border border-app-border shadow-subtle space-y-4">
           <div className="flex items-center justify-between border-b border-app-border pb-3">
-            <h3 className="text-base font-bold text-app-text">Immutable Audit Event Timeline</h3>
-            <span className="text-xs text-app-text-secondary font-mono">{reqEvents.length} Event(s) Recorded</span>
+            <h3 className="text-base font-bold text-app-text font-display">Immutable Audit Event Timeline</h3>
+            <span className="text-xs text-app-text-secondary font-mono bg-app-muted px-2 py-0.5 rounded border border-app-border">
+              {reqEvents.length} Event(s) Recorded
+            </span>
           </div>
 
           <EventTimeline events={reqEvents} />
@@ -369,7 +575,7 @@ export const TrackRequestView: React.FC = () => {
         {/* Side Panel: Facility Details & Governance (1 Column) */}
         <div className="space-y-4">
           {/* Hospital & Attendant Details */}
-          <div className="bg-app-surface p-5 rounded-xl border border-app-border shadow-card space-y-3 text-xs">
+          <div className="bg-app-surface p-5 rounded-xl border border-app-border shadow-subtle space-y-3 text-xs">
             <h4 className="font-bold text-app-text-secondary uppercase tracking-wider text-[11px]">
               Care Facility & Attendant
             </h4>
@@ -398,7 +604,7 @@ export const TrackRequestView: React.FC = () => {
           </div>
 
           {/* Hospital Arrival Transfusion Desk Guidelines */}
-          <div className="bg-app-surface p-5 rounded-xl border border-app-border shadow-card space-y-2 text-xs">
+          <div className="bg-app-surface p-5 rounded-xl border border-app-border shadow-subtle space-y-2 text-xs">
             <h4 className="font-bold text-app-text uppercase tracking-wider text-[11px]">
               Transfusion Desk Protocols
             </h4>
@@ -408,12 +614,12 @@ export const TrackRequestView: React.FC = () => {
           </div>
 
           {/* Clinical Safety Disclaimer */}
-          <div className="bg-app-text text-app-muted p-5 rounded-xl space-y-2 text-xs">
-            <div className="flex items-center gap-1.5 text-success-light font-bold">
-              <ShieldCheck className="w-4 h-4" />
+          <div className="bg-app-surface border border-app-border p-5 rounded-xl space-y-2 text-xs shadow-subtle">
+            <div className="flex items-center gap-1.5 text-success font-bold">
+              <ShieldCheck className="w-4 h-4 text-success" />
               <span>Medical Safety Principle</span>
             </div>
-            <p className="text-[11px] text-app-muted/80 leading-relaxed">
+            <p className="text-[11px] text-app-text-secondary leading-relaxed">
               CareLoop coordinates communication events and donor discovery. Medical cross-match compatibility testing and physical donor eligibility screening are strictly conducted by accredited hospital pathologists.
             </p>
           </div>

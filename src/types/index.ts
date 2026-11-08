@@ -110,6 +110,8 @@ export interface Donor {
   phone: string;
   email?: string;
   bloodGroup: BloodGroup;
+  gender?: 'male' | 'female' | 'other' | string;
+  sex?: 'male' | 'female' | 'other' | string;
   city: string;
   district?: string;
   approxDistanceKm?: number;

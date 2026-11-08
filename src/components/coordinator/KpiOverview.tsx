@@ -1,5 +1,6 @@
 import React from 'react';
 import { EmergencyRequest } from '../../types';
+import { StatCard } from '../common/StatCard';
 import { Activity, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 interface KpiOverviewProps {
@@ -7,60 +8,51 @@ interface KpiOverviewProps {
 }
 
 export const KpiOverview: React.FC<KpiOverviewProps> = ({ requests }) => {
-  const activeCount = requests.filter((r) => r.status !== 'FULFILLED' && r.status !== 'CANCELLED').length;
-  const awaitingCount = requests.filter((r) => r.status === 'AWAITING_RESPONSE' || r.status === 'MATCHING_RESPONDERS').length;
-  const coordinatingCount = requests.filter((r) => r.status === 'RESPONDER_FOUND' || r.status === 'AWAITING_CENTRE_VERIFICATION' || r.status === 'DONOR_ASSIGNED').length;
+  const activeCount = requests.filter(
+    (r) => r.status !== 'FULFILLED' && r.status !== 'CANCELLED' && r.status !== 'EXPIRED'
+  ).length;
+  const awaitingCount = requests.filter(
+    (r) => r.status === 'AWAITING_RESPONSE' || r.status === 'MATCHING_RESPONDERS'
+  ).length;
+  const coordinatingCount = requests.filter(
+    (r) =>
+      r.status === 'RESPONDER_FOUND' ||
+      r.status === 'AWAITING_CENTRE_VERIFICATION' ||
+      r.status === 'DONOR_ASSIGNED' ||
+      r.status === 'COORDINATION_IN_PROGRESS'
+  ).length;
   const resolvedCount = requests.filter((r) => r.status === 'FULFILLED').length;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-      <div className="bg-app-surface p-4 rounded-xl border border-app-border shadow-subtle flex items-center justify-between">
-        <div>
-          <span className="text-[11px] font-bold text-app-text-secondary uppercase tracking-wider block">
-            Active Emergencies
-          </span>
-          <span className="text-2xl font-bold text-app-text mt-1 block">{activeCount}</span>
-        </div>
-        <div className="w-10 h-10 rounded-lg bg-brand-light text-brand flex items-center justify-center font-bold shrink-0">
-          <Activity className="w-5 h-5" />
-        </div>
-      </div>
-
-      <div className="bg-app-surface p-4 rounded-xl border border-app-border shadow-subtle flex items-center justify-between">
-        <div>
-          <span className="text-[11px] font-bold text-app-text-secondary uppercase tracking-wider block">
-            Awaiting Responders
-          </span>
-          <span className="text-2xl font-bold text-warning-dark mt-1 block">{awaitingCount}</span>
-        </div>
-        <div className="w-10 h-10 rounded-lg bg-warning-light text-warning-dark flex items-center justify-center font-bold shrink-0">
-          <Clock className="w-5 h-5" />
-        </div>
-      </div>
-
-      <div className="bg-app-surface p-4 rounded-xl border border-app-border shadow-subtle flex items-center justify-between">
-        <div>
-          <span className="text-[11px] font-bold text-app-text-secondary uppercase tracking-wider block">
-            Coordinating Units
-          </span>
-          <span className="text-2xl font-bold text-info mt-1 block">{coordinatingCount}</span>
-        </div>
-        <div className="w-10 h-10 rounded-lg bg-info-light text-info flex items-center justify-center font-bold shrink-0">
-          <AlertTriangle className="w-5 h-5" />
-        </div>
-      </div>
-
-      <div className="bg-app-surface p-4 rounded-xl border border-app-border shadow-subtle flex items-center justify-between">
-        <div>
-          <span className="text-[11px] font-bold text-app-text-secondary uppercase tracking-wider block">
-            Fulfilled Records
-          </span>
-          <span className="text-2xl font-bold text-success mt-1 block">{resolvedCount}</span>
-        </div>
-        <div className="w-10 h-10 rounded-lg bg-success-light text-success flex items-center justify-center font-bold shrink-0">
-          <CheckCircle2 className="w-5 h-5" />
-        </div>
-      </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatCard
+        label="Active Emergencies"
+        value={activeCount}
+        subtext={activeCount > 0 ? 'Urgent calls under management' : 'No active alerts'}
+        icon={Activity}
+        variant={activeCount > 0 ? 'emergency' : 'neutral'}
+      />
+      <StatCard
+        label="Awaiting Responders"
+        value={awaitingCount}
+        subtext={awaitingCount > 0 ? 'Dispatch broadcasts active' : 'All matched'}
+        icon={Clock}
+        variant={awaitingCount > 0 ? 'warning' : 'neutral'}
+      />
+      <StatCard
+        label="In Coordination"
+        value={coordinatingCount}
+        subtext="Donors en-route / cross-matching"
+        icon={AlertTriangle}
+        variant={coordinatingCount > 0 ? 'info' : 'neutral'}
+      />
+      <StatCard
+        label="Fulfilled Transfusions"
+        value={resolvedCount}
+        subtext="Completed clinical transfers"
+        icon={CheckCircle2}
+        variant="success"
+      />
     </div>
   );
 };
