@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 interface BeforeAcceptanceTrackerProps {
-  request: EmergencyRequest;
+  request?: EmergencyRequest | null;
   trackingItems: DonorTrackingItem[];
   onSimulateAcceptance?: (donorId: string) => void;
   onInitiateEscalation?: () => void;
@@ -35,6 +35,24 @@ export const BeforeAcceptanceTracker: React.FC<BeforeAcceptanceTrackerProps> = (
   onInitiateEscalation,
 }) => {
   const [selectedDonorForDial, setSelectedDonorForDial] = useState<string | null>(null);
+
+  if (!request) {
+    return (
+      <div className="bg-white rounded-2xl border border-[#E6E9E7] p-8 sm:p-12 text-center max-w-xl mx-auto space-y-4 shadow-sm">
+        <div className="w-12 h-12 rounded-xl bg-[#F0F2F0] border border-[#E6E9E7] text-[#69716F] flex items-center justify-center mx-auto">
+          <Clock className="w-6 h-6 animate-pulse" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-bold text-[#202322]">
+            Awaiting Emergency Request Context
+          </h3>
+          <p className="text-xs text-[#69716F] max-w-md mx-auto leading-relaxed">
+            Emergency request details are loading or no active request was selected for dispatch tracking.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const getStatusBadge = (status: DonorTrackingCardStatus) => {
     switch (status) {
@@ -98,7 +116,7 @@ export const BeforeAcceptanceTracker: React.FC<BeforeAcceptanceTrackerProps> = (
           <div className="space-y-1">
             <div className="flex items-center gap-3">
               <span className="font-mono text-sm font-bold bg-[#F0F2F0] text-[#202322] px-2.5 py-1 rounded-md border border-[#E6E9E7]">
-                #{request.referenceCode}
+                #{request.referenceCode || 'REQ'}
               </span>
               <span
                 className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -108,11 +126,11 @@ export const BeforeAcceptanceTracker: React.FC<BeforeAcceptanceTrackerProps> = (
                 }`}
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
-                {request.urgency} Priority
+                {request.urgency || 'Urgent'} Priority
               </span>
             </div>
             <h2 className="text-xl font-bold text-[#202322] pt-1">
-              {request.unitsRequired} Units of {request.bloodGroup} {request.component}
+              {request.unitsRequired || 1} Units of {request.bloodGroup || '—'} {request.component || 'Blood'}
             </h2>
           </div>
 
@@ -133,8 +151,8 @@ export const BeforeAcceptanceTracker: React.FC<BeforeAcceptanceTrackerProps> = (
             <Hospital className="w-5 h-5 text-[#B42332] shrink-0 mt-0.5" />
             <div>
               <p className="text-xs font-medium text-[#69716F]">Hospital & Ward</p>
-              <p className="text-sm font-semibold text-[#202322]">{request.hospitalName}</p>
-              <p className="text-xs text-[#69716F]">{request.hospitalAddress}</p>
+              <p className="text-sm font-semibold text-[#202322]">{request.hospitalName || 'Designated Hospital'}</p>
+              <p className="text-xs text-[#69716F]">{request.hospitalAddress || 'Transfusion Reception'}</p>
             </div>
           </div>
 
@@ -143,7 +161,7 @@ export const BeforeAcceptanceTracker: React.FC<BeforeAcceptanceTrackerProps> = (
             <div>
               <p className="text-xs font-medium text-[#69716F]">Location & Jurisdiction</p>
               <p className="text-sm font-semibold text-[#202322]">
-                {request.city}, {request.district || 'Metro'}
+                {request.city || 'Emergency Dispatch'}, {request.district || 'Metro'}
               </p>
               <p className="text-xs text-[#69716F]">Telangana • PIN: {request.postalCode || '500082'}</p>
             </div>
@@ -153,8 +171,8 @@ export const BeforeAcceptanceTracker: React.FC<BeforeAcceptanceTrackerProps> = (
             <PhoneCall className="w-5 h-5 text-[#16845B] shrink-0 mt-0.5" />
             <div>
               <p className="text-xs font-medium text-[#69716F]">Attendant Contact</p>
-              <p className="text-sm font-semibold text-[#202322]">{request.contactName}</p>
-              <p className="text-xs text-[#69716F] font-mono">{request.contactPhone}</p>
+              <p className="text-sm font-semibold text-[#202322]">{request.contactName || 'Hospital Attendant'}</p>
+              <p className="text-xs text-[#69716F] font-mono">{request.contactPhone || 'Contact Desk'}</p>
             </div>
           </div>
         </div>

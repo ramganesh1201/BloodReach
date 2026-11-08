@@ -29,11 +29,15 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
   const filteredConversations = conversations.filter((conv) => {
     const term = searchTerm.toLowerCase();
+    const donorName = conv.donorName || '';
+    const refCode = conv.referenceCode || '';
+    const hospitalName = conv.hospitalName || '';
+    const requesterName = conv.requesterName || '';
     return (
-      conv.donorName.toLowerCase().includes(term) ||
-      conv.referenceCode.toLowerCase().includes(term) ||
-      conv.hospitalName.toLowerCase().includes(term) ||
-      conv.requesterName.toLowerCase().includes(term)
+      donorName.toLowerCase().includes(term) ||
+      refCode.toLowerCase().includes(term) ||
+      hospitalName.toLowerCase().includes(term) ||
+      requesterName.toLowerCase().includes(term)
     );
   });
 
@@ -93,8 +97,9 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
         ) : (
           filteredConversations.map((conv) => {
             const isSelected = conv.id === activeConversationId;
-            const displayName = currentRole === 'donor' ? conv.requesterName : conv.donorName;
-            const subtitle = currentRole === 'donor' ? `Attendant • #${conv.referenceCode}` : `Donor (${conv.donorBloodGroup}) • #${conv.referenceCode}`;
+            const displayName = currentRole === 'donor' ? (conv.requesterName || 'Emergency Attendant') : (conv.donorName || 'Responder');
+            const refDisplay = conv.referenceCode ? `#${conv.referenceCode}` : 'Direct Channel';
+            const subtitle = currentRole === 'donor' ? `Attendant • ${refDisplay}` : `Donor (${conv.donorBloodGroup || '—'}) • ${refDisplay}`;
 
             return (
               <button
@@ -110,7 +115,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                 {/* Avatar with Blood Group chip */}
                 <div className="relative shrink-0">
                   <div className="w-10 h-10 rounded-full bg-[#8F1928]/10 text-[#8F1928] font-bold flex items-center justify-center text-sm border border-[#8F1928]/20">
-                    {conv.donorBloodGroup}
+                    {conv.donorBloodGroup || '—'}
                   </div>
                   <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center">
                     <Radio className="w-2 h-2 text-white animate-pulse" />
@@ -142,10 +147,10 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
                   <div className="flex items-center gap-1.5 pt-0.5">
                     <span className="font-mono text-[10px] bg-[#F0F2F0] text-[#202322] px-1.5 py-0.2 rounded border border-[#E6E9E7]">
-                      {conv.referenceCode}
+                      {conv.referenceCode || 'Direct'}
                     </span>
                     <span className="text-[10px] text-[#69716F] truncate">
-                      {conv.hospitalName}
+                      {conv.hospitalName || 'Emergency Hospital'}
                     </span>
                   </div>
                 </div>

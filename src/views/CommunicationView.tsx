@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { BeforeAcceptanceTracker } from '../components/communication/BeforeAcceptanceTracker';
 import { ConversationSidebar } from '../components/communication/ConversationSidebar';
@@ -6,7 +7,7 @@ import { ChatTimeline } from '../components/communication/ChatTimeline';
 import { MessageComposer } from '../components/communication/MessageComposer';
 import { CoordinationActionPanel } from '../components/communication/CoordinationActionPanel';
 import { ContextPanel } from '../components/communication/ContextPanel';
-import { WorkspaceHeader } from '../components/common/WorkspaceHeader';
+import { EmptyState } from '../components/common/EmptyState';
 import {
   MessageSquare,
   ShieldCheck,
@@ -18,6 +19,7 @@ import {
 import { CoordinationEventType, MessageAttachment } from '../types';
 
 export const CommunicationView: React.FC = () => {
+  const navigate = useNavigate();
   const {
     requests,
     conversations,
@@ -37,18 +39,40 @@ export const CommunicationView: React.FC = () => {
     isOffline,
   } = useBloodStore();
 
-  const [selectedRequestId, setSelectedRequestId] = useState<string>(() => requests[0]?.id || 'req-8f42');
+  const [selectedRequestId, setSelectedRequestId] = useState<string>(() => requests[0]?.id || '');
   const [mobileTab, setMobileTab] = useState<'sidebar' | 'chat' | 'context'>('chat');
-
-  // Currently selected request
-  const activeRequest = requests.find((r) => r.id === selectedRequestId) || requests[0];
 
   // User-scoped conversations
   const userConversations = getConversationsForUser();
 
-  // Active conversation object
+  // Synchronize selectedRequestId with available requests
+  useEffect(() => {
+    if (requests.length > 0) {
+      if (!selectedRequestId || !requests.some((r) => r.id === selectedRequestId)) {
+        setSelectedRequestId(requests[0].id);
+      }
+    } else if (selectedRequestId) {
+      setSelectedRequestId('');
+    }
+  }, [requests, selectedRequestId]);
+
+  // Synchronize activeConversationId with available userConversations
+  useEffect(() => {
+    if (userConversations.length > 0) {
+      if (!activeConversationId || !userConversations.some((c) => c.id === activeConversationId)) {
+        setActiveConversationId(userConversations[0].id);
+      }
+    } else if (activeConversationId) {
+      setActiveConversationId(null);
+    }
+  }, [userConversations, activeConversationId, setActiveConversationId]);
+
+  // Currently selected request (null if requests array is empty)
+  const activeRequest = requests.find((r) => r.id === selectedRequestId) || requests[0] || null;
+
+  // Active conversation object strictly scoped to user's permitted conversations
   const activeConversation =
-    conversations.find((c) => c.id === activeConversationId) || userConversations[0] || null;
+    userConversations.find((c) => c.id === activeConversationId) || userConversations[0] || null;
 
   // Active chat stream
   const activeMessages = activeConversation ? chatMessages[activeConversation.id] || [] : [];
@@ -58,6 +82,11 @@ export const CommunicationView: React.FC = () => {
   const acceptedDonorsForRequest = trackingItems.filter(
     (t) => t.hasAccepted || t.status === 'ACCEPTED'
   );
+
+  // Conversations already established for this specific request
+  const conversationsForActiveRequest = activeRequest
+    ? userConversations.filter((c) => c.requestId === activeRequest.id)
+    : [];
 
   // Mark active conversation as read when selected
   useEffect(() => {
@@ -97,8 +126,14 @@ export const CommunicationView: React.FC = () => {
     await initiateCall(activeConversation.id);
   };
 
-  // Determine if we should show the Before-Acceptance tracker
-  const isBeforeAcceptance = currentRole !== 'donor' && acceptedDonorsForRequest.length === 0;
+  // Determine if we should show the Before-Acceptance tracker:
+  // Requires a genuine activeRequest, non-donor role, zero accepted donors, and no opened conversations.
+  const isBeforeAcceptance = Boolean(
+    activeRequest &&
+    currentRole !== 'donor' &&
+    acceptedDonorsForRequest.length === 0 &&
+    conversationsForActiveRequest.length === 0
+  );
 
   return (
     <div className="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8 space-y-4 sm:space-y-6 animate-fade-in min-h-[calc(100vh-5rem)] flex flex-col">
@@ -125,52 +160,58 @@ export const CommunicationView: React.FC = () => {
         </div>
 
         {/* Request Selector & View Mode Switcher */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 bg-app-muted/60 border border-app-border rounded-lg p-1">
-            <span className="text-[11px] font-semibold text-app-text-secondary px-2">Request:</span>
-            {requests.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => {
-                  setSelectedRequestId(r.id);
-                  const conv = conversations.find((c) => c.requestId === r.id);
-                  if (conv) setActiveConversationId(conv.id);
-                }}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
-                  selectedRequestId === r.id
-                    ? 'bg-app-surface text-app-text shadow-xs border border-app-border'
-                    : 'text-app-text-secondary hover:text-app-text'
-                }`}
-              >
-                #{r.referenceCode} ({r.bloodGroup})
-              </button>
-            ))}
-          </div>
+        {requests.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 bg-app-muted/60 border border-app-border rounded-lg p-1">
+              <span className="text-[11px] font-semibold text-app-text-secondary px-2">Request:</span>
+              {requests.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedRequestId(r.id);
+                    const conv = userConversations.find((c) => c.requestId === r.id);
+                    if (conv) setActiveConversationId(conv.id);
+                  }}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                    selectedRequestId === r.id
+                      ? 'bg-app-surface text-app-text shadow-xs border border-app-border'
+                      : 'text-app-text-secondary hover:text-app-text'
+                  }`}
+                >
+                  #{r.referenceCode || 'REQ'} ({r.bloodGroup || '—'})
+                </button>
+              ))}
+            </div>
 
-          {/* Simulation Button for testing if in Before-Acceptance mode */}
-          {isBeforeAcceptance && (
-            <button
-              type="button"
-              onClick={() => handleSimulateAcceptance('donor-1')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand text-white hover:bg-brand-hover shadow-xs transition-all"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Simulate Donor Acceptance</span>
-            </button>
-          )}
-        </div>
+            {/* Simulation Button for testing if in Before-Acceptance mode */}
+            {isBeforeAcceptance && activeRequest && (
+              <button
+                type="button"
+                onClick={() => handleSimulateAcceptance('donor-1')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand text-white hover:bg-brand-hover shadow-xs transition-all"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Simulate Donor Acceptance</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main Experience Display */}
-      {isBeforeAcceptance ? (
+      {isBeforeAcceptance && activeRequest ? (
         <BeforeAcceptanceTracker
           request={activeRequest}
           trackingItems={trackingItems}
           onSimulateAcceptance={handleSimulateAcceptance}
-          onInitiateEscalation={() => escalateRequest(activeRequest.id)}
+          onInitiateEscalation={() => {
+            if (activeRequest) {
+              escalateRequest(activeRequest.id);
+            }
+          }}
         />
-      ) : (
+      ) : userConversations.length > 0 ? (
         <div className="flex-1 bg-app-surface rounded-xl border border-app-border shadow-subtle overflow-hidden flex flex-col min-h-[640px]">
           {/* Mobile Tab Switcher */}
           <div className="md:hidden flex items-center justify-around border-b border-app-border bg-app-muted/40 p-1.5 text-xs font-bold">
@@ -239,14 +280,14 @@ export const CommunicationView: React.FC = () => {
                   <div className="p-3.5 border-b border-app-border bg-app-surface flex items-center justify-between gap-3 shrink-0">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-10 h-10 rounded-full bg-brand-light text-brand font-bold flex items-center justify-center text-sm border border-brand/20 shrink-0 font-display">
-                        {activeConversation.donorBloodGroup}
+                        {activeConversation.donorBloodGroup || '—'}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <h2 className="text-sm font-bold text-app-text truncate">
                             {currentRole === 'donor'
-                              ? activeConversation.requesterName
-                              : activeConversation.donorName}
+                              ? (activeConversation.requesterName || 'Emergency Attendant')
+                              : (activeConversation.donorName || 'Responder')}
                           </h2>
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-success bg-success-light px-2 py-0.5 rounded-full border border-success-border shrink-0">
                             <Radio className="w-2.5 h-2.5 text-success animate-pulse" />
@@ -254,7 +295,10 @@ export const CommunicationView: React.FC = () => {
                           </span>
                         </div>
                         <p className="text-[11px] text-app-text-secondary truncate">
-                          Request #{activeConversation.referenceCode} • {activeConversation.hospitalName}
+                          {activeConversation.referenceCode
+                            ? `Request #${activeConversation.referenceCode}`
+                            : 'Direct Coordination Channel'}
+                          {activeConversation.hospitalName ? ` • ${activeConversation.hospitalName}` : ''}
                         </p>
                       </div>
                     </div>
@@ -337,6 +381,40 @@ export const CommunicationView: React.FC = () => {
             </div>
           </div>
         </div>
+      ) : (
+        <EmptyState
+          icon={MessageSquare}
+          title={
+            currentRole === 'patient'
+              ? 'No Active Emergency Requests'
+              : currentRole === 'donor'
+              ? 'No Active Coordination Channels'
+              : 'No Active Communications'
+          }
+          description={
+            currentRole === 'patient'
+              ? 'You do not have any active emergency requests in coordination. Submit a request to initiate emergency dispatch and activate direct responder channels.'
+              : currentRole === 'donor'
+              ? 'Direct messaging unlocks automatically as soon as you accept an emergency dispatch call. Visit the Donor Hub to review and accept active calls.'
+              : 'No active emergency requests or donor coordination channels are currently registered in this clinical workspace.'
+          }
+          action={
+            currentRole === 'patient'
+              ? {
+                  label: 'Create Blood Request',
+                  onClick: () => navigate('/request'),
+                }
+              : currentRole === 'donor'
+              ? {
+                  label: 'Go to Donor Hub',
+                  onClick: () => navigate('/donor'),
+                }
+              : {
+                  label: 'Coordinator Dashboard',
+                  onClick: () => navigate('/coordinator'),
+                }
+          }
+        />
       )}
     </div>
   );

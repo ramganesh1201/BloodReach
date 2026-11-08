@@ -34,7 +34,7 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({
           Emergency Request Context
         </h3>
         <p className="text-sm font-bold text-[#202322] mt-0.5">
-          Request #{conversation.referenceCode}
+          {conversation.referenceCode ? `Request #${conversation.referenceCode}` : 'Direct Coordination Channel'}
         </p>
       </div>
 
@@ -48,7 +48,7 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({
             </span>
           </div>
           <p className="text-xs text-[#69716F]">
-            Connect instantly with {isDonor ? conversation.requesterName : conversation.donorName} via secure voice.
+            Connect instantly with {isDonor ? (conversation.requesterName || 'Emergency Attendant') : (conversation.donorName || 'Responder')} via secure voice.
           </p>
           <button
             type="button"
@@ -71,22 +71,22 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({
                   : 'bg-amber-100 text-[#C58A24]'
               }`}
             >
-              {conversation.urgency}
+              {conversation.urgency || 'Urgent'}
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="p-2 rounded-lg bg-white border border-[#E6E9E7]">
               <p className="text-[10px] text-[#69716F]">Blood Group</p>
-              <p className="text-sm font-bold text-[#B42332]">{conversation.donorBloodGroup}</p>
+              <p className="text-sm font-bold text-[#B42332]">{conversation.donorBloodGroup || '—'}</p>
             </div>
             <div className="p-2 rounded-lg bg-white border border-[#E6E9E7]">
               <p className="text-[10px] text-[#69716F]">Component</p>
-              <p className="text-xs font-bold text-[#202322] truncate">{conversation.component}</p>
+              <p className="text-xs font-bold text-[#202322] truncate">{conversation.component || 'Whole Blood'}</p>
             </div>
             <div className="p-2 rounded-lg bg-white border border-[#E6E9E7] col-span-2">
               <p className="text-[10px] text-[#69716F]">Quantity Required</p>
-              <p className="text-xs font-bold text-[#202322]">{conversation.unitsRequired} Unit(s)</p>
+              <p className="text-xs font-bold text-[#202322]">{conversation.unitsRequired || 1} Unit(s)</p>
             </div>
           </div>
         </div>
@@ -99,12 +99,12 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({
           </div>
 
           <div className="space-y-1 text-xs">
-            <p className="font-semibold text-[#202322]">{conversation.hospitalName}</p>
+            <p className="font-semibold text-[#202322]">{conversation.hospitalName || 'Emergency Hospital'}</p>
             <p className="text-[#69716F]">Emergency Trauma Ward 2A, Transfusion Reception</p>
           </div>
 
           <a
-            href={`https://maps.google.com/?q=${encodeURIComponent(conversation.hospitalName)}`}
+            href={`https://maps.google.com/?q=${encodeURIComponent(conversation.hospitalName || 'Hospital')}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#3478B8] hover:underline pt-1"
