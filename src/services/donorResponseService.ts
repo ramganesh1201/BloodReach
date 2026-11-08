@@ -17,6 +17,77 @@ export interface AcceptRequestResult {
   error?: string;
 }
 
+export interface DonorOnboardingInput {
+  fullName: string;
+  phone: string;
+  email?: string;
+  bloodGroup: BloodGroup;
+  gender?: 'male' | 'female' | 'other';
+  age: number;
+  weightKg: number;
+  city: string;
+  district?: string;
+  state?: string;
+  donationHistory: number;
+  lastDonatedAt?: string;
+  donationType?: BloodComponent;
+  isAvailable: boolean;
+}
+
+export function normalizePhoneNumber(rawPhone: string): string {
+  const cleaned = rawPhone.trim().replace(/[\s\-()]/g, '');
+  if (/^[6-9]\d{9}$/.test(cleaned)) {
+    return `+91 ${cleaned.slice(0, 5)} ${cleaned.slice(5)}`;
+  }
+  if (/^(\+91|91)[6-9]\d{9}$/.test(cleaned)) {
+    const num = cleaned.replace(/^(\+91|91)/, '');
+    return `+91 ${num.slice(0, 5)} ${num.slice(5)}`;
+  }
+  return rawPhone.trim();
+}
+
+export function validateDonorOnboardingInput(data: DonorOnboardingInput): { valid: boolean; error?: string } {
+  if (!data.fullName || data.fullName.trim().length === 0) {
+    return { valid: false, error: 'Full name is required.' };
+  }
+  if (!data.phone || data.phone.trim().length < 7 || data.phone.trim().length > 50) {
+    return { valid: false, error: 'Valid contact phone number is required (7-50 characters).' };
+  }
+  const cleanDigits = data.phone.replace(/\D/g, '');
+  if (cleanDigits.length < 7 || cleanDigits.length > 15) {
+    return { valid: false, error: 'Please enter a valid telephone number (7-15 digits).' };
+  }
+  if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) {
+    return { valid: false, error: 'Please enter a valid email address.' };
+  }
+  const validBloodGroups: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+  if (!validBloodGroups.includes(data.bloodGroup)) {
+    return { valid: false, error: `Invalid blood group: ${data.bloodGroup}` };
+  }
+  if (!Number.isInteger(data.age) || data.age < 18 || data.age > 65) {
+    return { valid: false, error: 'Eligible donor age must be between 18 and 65 years.' };
+  }
+  if (typeof data.weightKg !== 'number' || data.weightKg < 45) {
+    return { valid: false, error: 'Eligible donor weight must be at least 45 kg.' };
+  }
+  if (!data.city || data.city.trim().length === 0) {
+    return { valid: false, error: 'City is required.' };
+  }
+  if (data.donationHistory < 0 || !Number.isInteger(data.donationHistory)) {
+    return { valid: false, error: 'Total donations must be a non-negative integer.' };
+  }
+  if (data.lastDonatedAt) {
+    const lastDate = new Date(data.lastDonatedAt);
+    if (isNaN(lastDate.getTime())) {
+      return { valid: false, error: 'Invalid last donation date format.' };
+    }
+    if (lastDate > new Date()) {
+      return { valid: false, error: 'Last donation date cannot be in the future.' };
+    }
+  }
+  return { valid: true };
+}
+
 /**
  * Map raw database row to frontend Donor domain model
  */
@@ -68,6 +139,71 @@ export async function getDonorProfileByUserId(
       success: false,
       error: err?.message || 'Failed to retrieve donor profile.',
     };
+  }
+}
+
+/**
+ * Submit verified donor onboarding application
+ * Persists to public.donors with is_medically_cleared: false awaiting administrative role activation
+ */
+export async function submitDonorOnboarding(
+  input: DonorOnboardingInput,
+  userId: string
+): Promise<{ success: boolean; data?: Donor; error?: string }> {
+  if (!userId) {
+    return { success: false, error: 'User must be authenticated to submit donor registration.' };
+  }
+
+  const validation = validateDonorOnboardingInput(input);
+  if (!validation.valid) {
+    return { success: false, error: validation.error };
+  }
+
+  const birthYear = new Date().getFullYear() - input.age;
+  const estimatedBirthDate = `${birthYear}-01-01`;
+  const normalizedPhone = normalizePhoneNumber(input.phone);
+
+  const payload = {
+    profile_id: userId,
+    full_name: input.fullName.trim(),
+    phone: normalizedPhone,
+    email: input.email?.trim() || null,
+    blood_group: input.bloodGroup,
+    city: input.city.trim(),
+    district: input.district?.trim() || null,
+    weight_kg: input.weightKg,
+    birth_date: estimatedBirthDate,
+    last_donated_at: input.lastDonatedAt || null,
+    last_donated_component: input.donationType || null,
+    is_available: input.isAvailable ?? true,
+    total_donations: input.donationHistory ?? 0,
+    is_medically_cleared: false, // Requires clinical verification & admin approval
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('donors')
+      .upsert(payload, { onConflict: 'profile_id' })
+      .select()
+      .single();
+
+    if (error) {
+      if (
+        error.code === '23505' ||
+        error.message?.includes('duplicate key') ||
+        error.message?.includes('donors_phone_key')
+      ) {
+        return {
+          success: false,
+          error: 'This phone number is already registered to another volunteer donor profile.',
+        };
+      }
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: mapDbToDonor(data) };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to submit donor onboarding.' };
   }
 }
 

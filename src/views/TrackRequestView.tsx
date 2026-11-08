@@ -393,7 +393,8 @@ export const TrackRequestView: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-app-text-secondary">
-              Initiated {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Attendant: {req.contactName} ({req.contactPhone})
+              Initiated {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {req.contactPhone ? ` • Attendant: ${req.contactName ? `${req.contactName} (${req.contactPhone})` : req.contactPhone}` : ''}
             </p>
           </div>
 
@@ -588,18 +589,20 @@ export const TrackRequestView: React.FC = () => {
                 {req.hospitalAddress}, {req.city}
               </p>
 
-              <div className="pt-2 border-t border-app-border flex items-center justify-between text-app-text">
-                <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-app-text-secondary shrink-0" />
-                  <span>{req.contactName} ({req.contactPhone})</span>
+              {req.contactPhone && (
+                <div className="pt-2 border-t border-app-border flex items-center justify-between text-app-text">
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-app-text-secondary shrink-0" />
+                    <span>{req.contactName ? `${req.contactName} (${req.contactPhone})` : req.contactPhone}</span>
+                  </div>
+                  <a
+                    href={`tel:${req.contactPhone}`}
+                    className="text-xs font-bold text-brand hover:underline"
+                  >
+                    Call
+                  </a>
                 </div>
-                <a
-                  href={`tel:${req.contactPhone}`}
-                  className="text-xs font-bold text-brand hover:underline"
-                >
-                  Call
-                </a>
-              </div>
+              )}
             </div>
           </div>
 

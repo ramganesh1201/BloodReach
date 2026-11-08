@@ -5,6 +5,7 @@ import { StatusBadge } from '../components/common/StatusBadge';
 import { WorkspaceHeader } from '../components/common/WorkspaceHeader';
 import { StatCard } from '../components/common/StatCard';
 import { EmptyState } from '../components/common/EmptyState';
+import { DonorOnboardingModal } from '../components/donor/DonorOnboardingModal';
 import {
   UserRound,
   Droplet,
@@ -23,6 +24,7 @@ import {
   Building2,
   Loader2,
   AlertCircle,
+  Heart,
 } from 'lucide-react';
 
 export const PatientView: React.FC = () => {
@@ -33,11 +35,17 @@ export const PatientView: React.FC = () => {
   const [cancelReason, setCancelReason] = useState('Requirement satisfied elsewhere');
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
-  const activeRequests = requests.filter(
+  // Strict Dashboard Isolation: Patient only views their own requests
+  const userRequests = currentUser
+    ? requests.filter((r) => r.createdBy === currentUser.id)
+    : requests;
+
+  const activeRequests = userRequests.filter(
     (r) => r.status !== 'FULFILLED' && r.status !== 'CANCELLED' && r.status !== 'EXPIRED'
   );
-  const historyRequests = requests.filter(
+  const historyRequests = userRequests.filter(
     (r) => r.status === 'FULFILLED' || r.status === 'CANCELLED' || r.status === 'EXPIRED'
   );
 
@@ -179,6 +187,14 @@ export const PatientView: React.FC = () => {
             >
               <PlusCircle className="w-4 h-4 shrink-0" />
               <span>Create Blood Request</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsOnboardingOpen(true)}
+              className="bg-brand-light hover:bg-brand/20 text-brand font-semibold text-xs sm:text-sm py-2 px-3.5 rounded-lg transition-colors border border-brand/20 flex items-center gap-2"
+            >
+              <Heart className="w-4 h-4 text-brand shrink-0 fill-current" />
+              <span>Register as Donor</span>
             </button>
             <button
               type="button"
@@ -432,6 +448,12 @@ export const PatientView: React.FC = () => {
           })}
         </div>
       )}
+
+      {/* Volunteer Donor Onboarding Modal */}
+      <DonorOnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+      />
     </div>
   );
 };

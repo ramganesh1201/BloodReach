@@ -200,7 +200,9 @@ class NotificationService {
           p_idempotency_key: params.idempotencyKey || null,
         })
       )
-        .then(({ data, error }) => {
+        .then((res: any) => {
+          const data = res?.data;
+          const error = res?.error;
           if (!error && data?.notification_id) {
             this.notifications = this.notifications.map((n) =>
               n.id === localId ? { ...n, id: data.notification_id } : n

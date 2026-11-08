@@ -527,4 +527,51 @@ describe('CareLoop — Product UI Redesign Verification Suite', () => {
       expect(opError).toContain('requires an active authenticated administrator session');
     });
   });
+
+  /* -------------------------------------------------------------------------- */
+  /* 7. Migration 17 Security & Hardened Guest Submission Verification           */
+  /* -------------------------------------------------------------------------- */
+  describe('7. Migration 17 Hardened Guest Tracking & Idempotency Audit', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const migrationPath = path.resolve(
+      process.cwd(),
+      'supabase/migrations/20261106150000_harden_discovery_and_guest_tracking.sql'
+    );
+    const sql: string = fs.readFileSync(migrationPath, 'utf-8');
+
+    it('7.1 Enforces uniqueness constraint on tracking_token', () => {
+      expect(sql).toContain('uq_emergency_requests_tracking_token UNIQUE (tracking_token)');
+      expect(sql).toContain('idx_requests_tracking_token');
+    });
+
+    it('7.2 Protects idempotency: returns existing record ONLY when tracking token matches', () => {
+      expect(sql).toContain('IF v_existing_token = v_tracking_token THEN');
+      expect(sql).toContain("'idempotent', true");
+      expect(sql).toContain("'Request ID already exists with different authorization credentials.'");
+    });
+
+    it('7.3 Disambiguates unique collisions via GET STACKED DIAGNOSTICS', () => {
+      expect(sql).toContain('GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME;');
+      expect(sql).toContain("v_constraint_name = 'emergency_requests_reference_code_key'");
+      expect(sql).toContain("'collision', true");
+      expect(sql).toContain("v_constraint_name = 'emergency_requests_pkey'");
+      expect(sql).toContain("v_constraint_name = 'uq_emergency_requests_tracking_token'");
+    });
+
+    it('7.4 Eliminates raw SQLERRM leakage from anonymous exception handler', () => {
+      expect(sql).not.toContain('SQLERRM');
+      expect(sql).toContain("'An internal database error occurred while recording the emergency request.'");
+    });
+
+    it('7.5 Validates server-side bounds (lat, lng, units <= 50, mandatory text)', () => {
+      expect(sql).toContain('p_units_required > 50');
+      expect(sql).toContain('p_lat < -90 OR p_lat > 90');
+      expect(sql).toContain('p_lng < -180 OR p_lng > 180');
+      expect(sql).toContain('LENGTH(TRIM(p_reference_code)) > 50');
+      expect(sql).toContain('LENGTH(TRIM(p_hospital_name)) > 255');
+      expect(sql).toContain('LENGTH(TRIM(p_hospital_address)) > 500');
+      expect(sql).toContain('LENGTH(TRIM(p_city)) > 100');
+    });
+  });
 });

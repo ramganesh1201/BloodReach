@@ -4,6 +4,7 @@ import { useBloodStore } from '../../store/useBloodStore';
 import { UserRole } from '../../types';
 import { DESKTOP_NAV_BY_ROLE } from '../../config/navigation';
 import { AuthModal } from './AuthModal';
+import { DonorOnboardingModal } from '../donor/DonorOnboardingModal';
 import {
   Menu,
   X,
@@ -12,6 +13,7 @@ import {
   Bell,
   Droplet,
   User,
+  Heart,
   CheckCircle2,
   Clock,
   WifiOff,
@@ -59,8 +61,23 @@ export const Header: React.FC = () => {
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [donorOnboardingOpen, setDonorOnboardingOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+
+  // User-specific notification isolation:
+  // In live authenticated sessions, align strictly with database RLS ("user_id = auth.uid()").
+  // Never expose private notifications across accounts or to unauthenticated visitors.
+  const userNotifications = notifications.filter((n) => {
+    if (demoExperience) {
+      if (n.metadata?.role) return n.metadata.role === demoExperience;
+      return true;
+    }
+    if (!currentUser) return false;
+    return n.userId === currentUser.id;
+  });
+
+  const unreadCount = userNotifications.filter((n) => n.status !== 'ACKNOWLEDGED').length;
 
   const desktopNavItems = (authenticatedRole || demoExperience)
     ? (DESKTOP_NAV_BY_ROLE[currentRole] || DESKTOP_NAV_BY_ROLE['patient'])
@@ -210,80 +227,82 @@ export const Header: React.FC = () => {
 
             {/* Right Action Controls: Notification Bell + Session / Persona trigger */}
             <div className="flex items-center gap-2 sm:gap-3">
-              {/* Notification Popover Drawer */}
-              <div className="relative" ref={notifRef}>
-                <button
-                  type="button"
-                  onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
-                  className="relative p-2 rounded-md text-app-text-secondary hover:text-app-text hover:bg-app-muted transition-colors"
-                  aria-label="View notifications"
-                >
-                  <Bell className="w-4 h-4" />
-                  {unreadNotificationCount > 0 && (
-                    <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emergency text-[9px] font-bold text-white">
-                      {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
-                    </span>
-                  )}
-                </button>
+              {/* Notification Popover Drawer (Authenticated Sessions & Role Previews Only) */}
+              {(authenticatedRole || demoExperience) && (
+                <div className="relative" ref={notifRef}>
+                  <button
+                    type="button"
+                    onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
+                    className="relative p-2 rounded-md text-app-text-secondary hover:text-app-text hover:bg-app-muted transition-colors"
+                    aria-label="View notifications"
+                  >
+                    <Bell className="w-4 h-4" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emergency text-[9px] font-bold text-white">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </button>
 
-                {/* Dropdown Container */}
-                {notifDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl bg-app-surface shadow-elevated border border-app-border py-3 z-50 animate-fade-in">
-                    <div className="flex items-center justify-between px-4 pb-2.5 border-b border-app-border">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-app-text">System Notifications</span>
-                        <span className="bg-brand-light text-brand text-[10px] font-bold px-1.5 py-0.5 rounded-sm">
-                          {notifications.length}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={acknowledgeAllNotifications}
-                        className="text-[11px] text-brand hover:text-brand-dark font-semibold"
-                      >
-                        Mark all acknowledged
-                      </button>
-                    </div>
-
-                    <div className="max-h-80 overflow-y-auto divide-y divide-app-border">
-                      {notifications.length === 0 ? (
-                        <div className="py-8 text-center text-xs text-app-text-secondary">
-                          No alerts recorded.
+                  {/* Dropdown Container */}
+                  {notifDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl bg-app-surface shadow-elevated border border-app-border py-3 z-50 animate-fade-in">
+                      <div className="flex items-center justify-between px-4 pb-2.5 border-b border-app-border">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-app-text">System Notifications</span>
+                          <span className="bg-brand-light text-brand text-[10px] font-bold px-1.5 py-0.5 rounded-sm">
+                            {userNotifications.length}
+                          </span>
                         </div>
-                      ) : (
-                        notifications.slice(0, 10).map((n) => (
-                          <div
-                            key={n.id}
-                            onClick={() => acknowledgeNotification(n.id)}
-                            className={`p-3 text-xs cursor-pointer hover:bg-app-muted/50 transition-colors ${
-                              n.status !== 'ACKNOWLEDGED' ? 'bg-brand-light/30' : ''
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <span className="font-semibold text-app-text leading-tight">
-                                {n.title || 'Notification Alert'}
-                              </span>
-                              <span className="text-[10px] font-mono text-app-text-secondary whitespace-nowrap">
-                                {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-app-text-secondary mt-1 leading-relaxed">
-                              {n.content}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1.5 text-[10px] text-app-text-secondary">
-                              <span className="uppercase font-mono text-[9px] px-1.5 py-0.2 rounded bg-app-muted border border-app-border">
-                                {n.channel}
-                              </span>
-                              <span>•</span>
-                              <span className="capitalize">{n.status.toLowerCase()}</span>
-                            </div>
+                        <button
+                          type="button"
+                          onClick={acknowledgeAllNotifications}
+                          className="text-[11px] text-brand hover:text-brand-dark font-semibold"
+                        >
+                          Mark all acknowledged
+                        </button>
+                      </div>
+
+                      <div className="max-h-80 overflow-y-auto divide-y divide-app-border">
+                        {userNotifications.length === 0 ? (
+                          <div className="py-8 text-center text-xs text-app-text-secondary">
+                            No notifications recorded for this session.
                           </div>
-                        ))
-                      )}
+                        ) : (
+                          userNotifications.slice(0, 10).map((n) => (
+                            <div
+                              key={n.id}
+                              onClick={() => acknowledgeNotification(n.id)}
+                              className={`p-3 text-xs cursor-pointer hover:bg-app-muted/50 transition-colors ${
+                                n.status !== 'ACKNOWLEDGED' ? 'bg-brand-light/30' : ''
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <span className="font-semibold text-app-text leading-tight">
+                                  {n.title || 'Notification Alert'}
+                                </span>
+                                <span className="text-[10px] font-mono text-app-text-secondary whitespace-nowrap">
+                                  {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-app-text-secondary mt-1 leading-relaxed">
+                                {n.content}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1.5 text-[10px] text-app-text-secondary">
+                                <span className="uppercase font-mono text-[9px] px-1.5 py-0.2 rounded bg-app-muted border border-app-border">
+                                  {n.channel}
+                                </span>
+                                <span>•</span>
+                                <span className="capitalize">{n.status.toLowerCase()}</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
 
               {/* Sign In / Active Session Menu */}
               {authenticatedRole || demoExperience ? (
@@ -322,6 +341,19 @@ export const Header: React.FC = () => {
                           <User className="w-3.5 h-3.5 text-app-text-secondary" />
                           <span>My Workspace</span>
                         </Link>
+                        {currentRole === 'patient' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfileDropdownOpen(false);
+                              setDonorOnboardingOpen(true);
+                            }}
+                            className="w-full text-left px-3.5 py-2 hover:bg-brand-light/40 flex items-center gap-2 text-brand font-medium"
+                          >
+                            <Heart className="w-3.5 h-3.5 text-brand" />
+                            <span>Become a Volunteer Donor</span>
+                          </button>
+                        )}
                         <Link
                           to="/communication"
                           onClick={() => setProfileDropdownOpen(false)}
@@ -370,6 +402,11 @@ export const Header: React.FC = () => {
           </div>
         </div>
       </header>
+
+      <DonorOnboardingModal
+        isOpen={donorOnboardingOpen}
+        onClose={() => setDonorOnboardingOpen(false)}
+      />
     </>
   );
 };

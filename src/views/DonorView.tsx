@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { AvailabilityToggle } from '../components/donor/AvailabilityToggle';
 import { EmergencyCard } from '../components/donor/EmergencyCard';
+import { DonorOnboardingModal } from '../components/donor/DonorOnboardingModal';
 import { evaluateDonorEligibility, isClinicallyCompatible, DONATION_INTERVAL_DAYS } from '../services/matchingEngine';
 import { DonorAvailabilityState } from '../types';
 import { WorkspaceHeader } from '../components/common/WorkspaceHeader';
@@ -11,6 +12,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import {
   Bell,
   ShieldCheck,
+  ShieldAlert,
   Heart,
   Clock,
   CheckCircle2,
@@ -32,6 +34,7 @@ export const DonorView: React.FC = () => {
     respondToEmergency,
     setDonorAvailabilityState,
     currentUser,
+    demoExperience,
     isOffline,
   } = useBloodStore();
 
@@ -39,20 +42,84 @@ export const DonorView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'alerts' | 'commitments' | 'history'>('alerts');
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
+  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
 
-  // Active donor session
-  const activeDonor = donors.find((d) => d.email === currentUser?.email) || donors[0] || {
-    id: currentUser?.id || 'demo-donor',
-    fullName: currentUser?.fullName || 'Volunteer Donor',
-    email: currentUser?.email || 'donor@example.com',
-    phone: currentUser?.phone || '+91 98765 43210',
-    bloodGroup: 'O+',
-    city: 'Chennai',
-    approxDistanceKm: 2.5,
-    isAvailable: true,
-    totalDonations: 0,
-    lastDonatedAt: undefined,
-  };
+  // Active donor session - resolve strictly to authenticated user's linked donor record
+  const activeDonor =
+    donors.find(
+      (d) =>
+        (currentUser?.id && d.profileId === currentUser.id) ||
+        (currentUser?.email && d.email === currentUser.email)
+    ) || (demoExperience ? donors[0] : null);
+
+  // Unlinked or unonboarded user view
+  if (!activeDonor) {
+    return (
+      <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-6 animate-fade-in">
+        <WorkspaceHeader
+          breadcrumbs={[
+            { label: 'CareLoop', href: '/' },
+            { label: 'Donor Workspace' },
+          ]}
+          roleBadge={{
+            label: 'Volunteer Donor Portal',
+            variant: 'brand',
+            icon: Heart,
+          }}
+          title="Volunteer Donor Workspace"
+          description="Clinical donor verification and emergency blood coordination hub."
+        />
+
+        <div className="bg-app-surface border border-app-border rounded-2xl p-8 sm:p-12 text-center space-y-6 shadow-subtle">
+          <div className="w-16 h-16 rounded-2xl bg-brand/10 text-brand flex items-center justify-center mx-auto border border-brand/20">
+            <UserCheck className="w-8 h-8" />
+          </div>
+
+          <div className="max-w-md mx-auto space-y-2">
+            <h2 className="text-xl font-bold text-app-text font-display">
+              No Donor Profile Linked Yet
+            </h2>
+            <p className="text-xs sm:text-sm text-app-text-secondary leading-relaxed">
+              Your account ({currentUser?.email || 'Logged In'}) is not yet registered as a volunteer blood donor in the CareLoop clinical registry, or your registration is awaiting verification.
+            </p>
+          </div>
+
+          <div className="bg-app-muted/50 p-4 rounded-xl border border-app-border max-w-lg mx-auto text-left text-xs space-y-2">
+            <div className="flex items-center gap-2 text-app-text font-medium">
+              <ShieldAlert className="w-4 h-4 text-brand shrink-0" />
+              <span>Clinical Registry Requirements (NBTC 2023)</span>
+            </div>
+            <p className="text-app-text-secondary text-[11px] leading-relaxed">
+              To respond to emergency blood alerts, volunteer donors must submit clinical onboarding details including age (18–65), minimum body weight (≥45 kg), biological sex for interval validation (90 days male / 120 days female), and recent donation history.
+            </p>
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsOnboardingModalOpen(true)}
+              className="w-full sm:w-auto bg-brand hover:bg-brand-dark text-white font-semibold py-2.5 px-6 rounded-lg text-xs sm:text-sm transition-colors shadow-sm inline-flex items-center justify-center gap-2"
+            >
+              <Heart className="w-4 h-4" />
+              Complete Donor Onboarding
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/patient')}
+              className="w-full sm:w-auto bg-app-surface hover:bg-app-muted border border-app-border text-app-text font-medium py-2.5 px-5 rounded-lg text-xs sm:text-sm transition-colors"
+            >
+              Go to Patient Workspace
+            </button>
+          </div>
+        </div>
+
+        <DonorOnboardingModal
+          isOpen={isOnboardingModalOpen}
+          onClose={() => setIsOnboardingModalOpen(false)}
+        />
+      </div>
+    );
+  }
 
   const handleRespond = async (requestId: string, status: 'ACCEPTED' | 'DECLINED') => {
     setRespondingId(requestId);
@@ -455,6 +522,11 @@ export const DonorView: React.FC = () => {
           </p>
         </div>
       </div>
+
+      <DonorOnboardingModal
+        isOpen={isOnboardingModalOpen}
+        onClose={() => setIsOnboardingModalOpen(false)}
+      />
     </div>
   );
 };

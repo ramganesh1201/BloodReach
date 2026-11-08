@@ -577,6 +577,7 @@ interface BloodStoreContextType {
   cancelDonorAssignment: (assignmentId: string, reason?: string) => Promise<void>;
   toggleDonorAvailability: (donorId: string) => void;
   setDonorAvailabilityState: (donorId: string, state: DonorAvailabilityState) => void;
+  onboardAsDonor: (input: donorResponseService.DonorOnboardingInput) => Promise<{ success: boolean; data?: Donor; error?: string }>;
   
   // Blood Bank Operations
   updateInventory: (centreId: string, bloodGroup: BloodGroup, component: BloodComponent, newUnits: number) => Promise<void>;
@@ -2163,6 +2164,64 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   };
 
+  const onboardAsDonor = async (
+    input: donorResponseService.DonorOnboardingInput
+  ): Promise<{ success: boolean; data?: Donor; error?: string }> => {
+    if (!currentUser) {
+      return { success: false, error: 'User must be authenticated to submit donor registration.' };
+    }
+
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      setBackendError(null);
+      const res = await donorResponseService.submitDonorOnboarding(input, currentUser.id);
+      if (!res.success) {
+        setBackendError(res.error || 'Failed to submit donor onboarding.');
+        return { success: false, error: res.error };
+      }
+      if (res.data) {
+        setDonors((prev) => [res.data!, ...prev.filter((d) => d.profileId !== currentUser.id)]);
+      }
+    } else {
+      const newDonor: Donor = {
+        id: `donor-${Date.now()}`,
+        profileId: currentUser.id,
+        fullName: input.fullName,
+        phone: input.phone,
+        email: input.email || currentUser.email,
+        bloodGroup: input.bloodGroup,
+        gender: input.gender,
+        sex: input.gender,
+        city: input.city,
+        district: input.district,
+        isAvailable: input.isAvailable,
+        lastDonatedAt: input.lastDonatedAt,
+        lastDonatedComponent: input.donationType,
+        isMedicallyCleared: false,
+        weightKg: input.weightKg,
+        age: input.age,
+        totalDonations: input.donationHistory,
+        registeredAt: new Date().toISOString(),
+      };
+      setDonors((prev) => [newDonor, ...prev.filter((d) => d.profileId !== currentUser.id)]);
+    }
+
+    // Recipient-specific notification for the applicant
+    notificationService.sendInAppNotification({
+      userId: currentUser.id,
+      title: 'Donor Application Submitted',
+      content: `Your volunteer donor registration (${input.bloodGroup}) has been recorded and submitted for clinical verification.`,
+    });
+
+    // Administrative alert for coordinators/admins
+    notificationService.sendInAppNotification({
+      title: 'New Donor Registration',
+      content: `Volunteer donor application received from ${input.fullName} (${input.bloodGroup}, ${input.city}). Ready for verification and role activation.`,
+      metadata: { role: 'coordinator' },
+    });
+
+    return { success: true };
+  };
+
   const sendMessage = async (
     requestId: string,
     content: string,
@@ -3202,6 +3261,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         cancelDonorAssignment,
         toggleDonorAvailability,
         setDonorAvailabilityState,
+        onboardAsDonor,
         updateInventory,
         verifyAndFulfillRequest,
         sendMessage,

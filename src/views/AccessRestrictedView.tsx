@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { UserRole } from '../types';
 import { ROLE_DEFAULT_ROUTES } from '../config/navigation';
-import { ShieldAlert, ArrowLeft, Home } from 'lucide-react';
+import { DonorOnboardingModal } from '../components/donor/DonorOnboardingModal';
+import { ShieldAlert, ArrowLeft, Home, Heart } from 'lucide-react';
 
 interface AccessRestrictedViewProps {
   allowedRoles: UserRole[];
@@ -20,10 +21,12 @@ const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
 export const AccessRestrictedView: React.FC<AccessRestrictedViewProps> = ({ allowedRoles }) => {
   const { currentRole } = useBloodStore();
   const navigate = useNavigate();
+  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
 
   const currentRoleName = ROLE_DISPLAY_NAMES[currentRole] || currentRole;
   const allowedRoleNames = allowedRoles.map((r) => ROLE_DISPLAY_NAMES[r]).join(' or ');
   const defaultWorkspace = ROLE_DEFAULT_ROUTES[currentRole] || '/';
+  const canApplyAsDonor = allowedRoles.includes('donor') && currentRole === 'patient';
 
   return (
     <div className="max-w-xl mx-auto py-16 px-4 space-y-6 text-center">
@@ -55,11 +58,31 @@ export const AccessRestrictedView: React.FC<AccessRestrictedViewProps> = ({ allo
           </div>
         </div>
 
+        {canApplyAsDonor && (
+          <div className="bg-brand-light/30 border border-brand/20 rounded-xl p-4 text-left space-y-3">
+            <div className="flex items-center gap-2">
+              <Heart className="w-4 h-4 text-brand shrink-0" />
+              <strong className="text-xs font-bold text-app-text">Interested in becoming a Blood Donor?</strong>
+            </div>
+            <p className="text-[11px] text-app-text-secondary leading-relaxed">
+              CareLoop welcomes eligible voluntary donors. Complete our clinical onboarding questionnaire to submit your profile for coordinator review and activation.
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsOnboardingModalOpen(true)}
+              className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-2 px-4 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Heart className="w-3.5 h-3.5" />
+              Register as Volunteer Donor
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
           <button
             type="button"
             onClick={() => navigate(defaultWorkspace)}
-            className="w-full sm:w-auto bg-brand hover:bg-brand-dark text-white font-medium py-2.5 px-6 rounded-lg text-xs transition-colors shadow-sm inline-flex items-center justify-center gap-2"
+            className="w-full sm:w-auto bg-app-surface border border-app-border text-app-text-primary hover:bg-app-muted font-medium py-2.5 px-6 rounded-lg text-xs transition-colors shadow-sm inline-flex items-center justify-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
             Return to Authorized Workspace
@@ -73,6 +96,11 @@ export const AccessRestrictedView: React.FC<AccessRestrictedViewProps> = ({ allo
           </Link>
         </div>
       </div>
+
+      <DonorOnboardingModal
+        isOpen={isOnboardingModalOpen}
+        onClose={() => setIsOnboardingModalOpen(false)}
+      />
     </div>
   );
 };

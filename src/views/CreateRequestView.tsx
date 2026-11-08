@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { BloodGroup, BloodComponent, UrgencyLevel } from '../types';
@@ -10,13 +10,13 @@ import { Droplet, MapPin, User, CheckCircle2 } from 'lucide-react';
 
 export const CreateRequestView: React.FC = () => {
   const navigate = useNavigate();
-  const { createEmergencyRequest } = useBloodStore();
+  const { createEmergencyRequest, currentUser } = useBloodStore();
 
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Guided Form State with Realistic Defaults
+  // Clean form state initialized with authenticated account details (loaded once)
   const [formData, setFormData] = useState<{
     bloodGroup: BloodGroup;
     component: BloodComponent;
@@ -45,34 +45,64 @@ export const CreateRequestView: React.FC = () => {
     component: 'Packed RBC',
     unitsRequired: 2,
     urgency: 'Urgent',
-    hospitalName: 'Government General Hospital, Machilipatnam',
-    hospitalAddress: 'Ramanayyapeta Road, Near Bus Stand',
-    landmark: 'Near District Collectorate Complex',
-    hospitalContactPerson: 'Dr. Ramesh / Duty Medical Officer',
-    city: 'Machilipatnam',
-    district: 'Krishna',
+    hospitalName: '',
+    hospitalAddress: '',
+    landmark: '',
+    hospitalContactPerson: '',
+    city: currentUser?.city || '',
+    district: currentUser?.district || '',
     state: 'Andhra Pradesh',
-    postalCode: '521001',
-    latitude: 16.1856,
-    longitude: 81.1362,
-    facilityId: 'ap-krishna-ggh-machilipatnam',
-    locationSource: 'AP Department of Health & Family Welfare',
+    postalCode: '',
+    latitude: undefined,
+    longitude: undefined,
+    facilityId: undefined,
+    locationSource: 'Public Healthcare Directory',
     locationVerificationStatus: 'source_listed',
-    contactName: 'Robert Taylor',
-    contactPhone: '+91 98490 55123',
+    contactName: currentUser?.fullName || '',
+    contactPhone: currentUser?.phone || '',
     preferredContact: 'Phone',
     requiredDateTime: '',
-    additionalInstructions: 'Patient in Emergency Trauma Ward 2A. Scheduled for urgent surgery.',
+    additionalInstructions: '',
   });
+
+  // Profile hydration guard: prefill once upon async profile resolution without overwriting user edits
+  const hasHydratedRef = useRef(false);
+
+  useEffect(() => {
+    if (currentUser && !hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      setFormData((prev) => ({
+        ...prev,
+        contactName: prev.contactName || currentUser.fullName || '',
+        contactPhone: prev.contactPhone || currentUser.phone || '',
+        city: prev.city || currentUser.city || '',
+        district: prev.district || currentUser.district || '',
+      }));
+    }
+  }, [currentUser]);
 
   const updateFields = (fields: Partial<typeof formData>) => {
     setFormData((prev) => ({ ...prev, ...fields }));
   };
 
   const handleSubmit = async () => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+    if (isSubmitting) return; // Prevent duplicate concurrent submissions
     setSubmitError(null);
+
+    if (!formData.contactName.trim()) {
+      setSubmitError('Please provide the attendant/contact person name.');
+      return;
+    }
+    if (!formData.contactPhone.trim() || formData.contactPhone.trim().length < 7) {
+      setSubmitError('Please provide a valid attendant contact phone number.');
+      return;
+    }
+    if (!formData.hospitalName.trim() || !formData.hospitalAddress.trim() || !formData.city.trim()) {
+      setSubmitError('Please select or specify the hospital care location.');
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
       const res = await createEmergencyRequest(formData);
