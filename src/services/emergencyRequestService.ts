@@ -146,6 +146,10 @@ export async function createEmergencyRequest(
   const referenceCode = generateReferenceCode();
   const trackingToken = crypto.randomUUID();
 
+  const cleanUserId = userId?.trim() || null;
+  const isUserUuid = cleanUserId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanUserId) : false;
+  const validUserId = isUserUuid && cleanUserId ? cleanUserId : null;
+
   const insertPayload = {
     id: requestId,
     reference_code: referenceCode,
@@ -167,7 +171,7 @@ export async function createEmergencyRequest(
     contact_method: data.preferredContact,
     status: 'CREATED',
     escalation_level: 1,
-    created_by: userId || null,
+    created_by: validUserId,
     notes: data.notes || data.additionalInstructions || null,
     tracking_token: trackingToken,
   };
@@ -325,6 +329,64 @@ export async function createEmergencyRequest(
       .single();
 
     if (error) {
+      // Handle missing tracking_token column in database schema cache (PGRST204 / 42703)
+      if (
+        (error.code === 'PGRST204' || error.code === '42703') &&
+        (error.message?.includes('tracking_token') || (error as any).details?.includes('tracking_token'))
+      ) {
+        const fallbackPayload: Record<string, any> = { ...insertPayload };
+        delete fallbackPayload.tracking_token;
+        const { data: fbInserted, error: fbError } = await supabase
+          .from('emergency_requests')
+          .insert(fallbackPayload)
+          .select()
+          .single();
+
+        if (!fbError && fbInserted) {
+          const mapped = mapDbToEmergencyRequest(fbInserted);
+          mapped.trackingToken = trackingToken;
+          return { success: true, data: mapped };
+        }
+
+        if (fbError && (fbError.code === 'PGRST116' || fbError.message?.includes('JSON object requested'))) {
+          return {
+            success: true,
+            data: {
+              id: requestId,
+              referenceCode: insertPayload.reference_code,
+              bloodGroup: data.bloodGroup,
+              component: data.component,
+              unitsRequired: data.unitsRequired,
+              unitsCoordinated: 0,
+              urgency: data.urgency,
+              hospitalName: data.hospitalName.trim(),
+              hospitalAddress: data.hospitalAddress.trim(),
+              city: data.city.trim(),
+              district: data.district?.trim() || undefined,
+              state: data.state?.trim() || 'Andhra Pradesh',
+              postalCode: data.postalCode?.trim() || undefined,
+              lat: data.latitude ?? undefined,
+              lng: data.longitude ?? undefined,
+              contactName: data.contactName.trim(),
+              contactPhone: data.contactPhone.trim(),
+              preferredContact: data.preferredContact,
+              status: 'CREATED',
+              escalationLevel: 1,
+              createdBy: validUserId || undefined,
+              cancellationReason: undefined,
+              notes: data.notes || data.additionalInstructions || undefined,
+              trackingToken,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          };
+        }
+
+        if (fbError) {
+          return { success: false, error: fbError.message };
+        }
+      }
+
       // Check for reference code collision (retry once with fresh code)
       if (error.code === '23505' && error.message?.includes('reference_code')) {
         const retryCode = generateReferenceCode();
@@ -432,11 +494,19 @@ export async function getMyEmergencyRequests(
     return { success: false, error: 'User identifier is required.' };
   }
 
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId.trim());
+  if (!isUuid) {
+    // If the userId is a legacy or mock/demo string (e.g. 'usr-patient'),
+    // querying PostgreSQL with an invalid UUID syntax fails with HTTP 400 (22P02).
+    // Safely return empty list without firing an invalid query.
+    return { success: true, data: [] };
+  }
+
   try {
     const { data, error } = await supabase
       .from('emergency_requests')
       .select('*')
-      .eq('created_by', userId)
+      .eq('created_by', userId.trim())
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -448,6 +518,34 @@ export async function getMyEmergencyRequests(
     return {
       success: false,
       error: err?.message || 'Failed to fetch your emergency requests.',
+    };
+  }
+}
+
+/**
+ * Retrieve all emergency requests across the network
+ * (for coordinators, blood centres, and administrators)
+ */
+export async function getAllEmergencyRequests(): Promise<{
+  success: boolean;
+  data?: EmergencyRequest[];
+  error?: string;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('emergency_requests')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: (data || []).map(mapDbToEmergencyRequest) };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Failed to fetch emergency requests.',
     };
   }
 }
@@ -535,6 +633,11 @@ export async function cancelEmergencyRequest(
     return { success: false, error: 'Cancellation reason is required.' };
   }
 
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId.trim());
+  if (!isUuid) {
+    return { success: false, error: 'Invalid emergency request identifier.' };
+  }
+
   try {
     const { error } = await supabase
       .from('emergency_requests')
@@ -543,7 +646,7 @@ export async function cancelEmergencyRequest(
         cancellation_reason: reason.trim(),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', requestId)
+      .eq('id', requestId.trim())
       .not('status', 'in', '("FULFILLED","CANCELLED","EXPIRED")');
 
     if (error) {

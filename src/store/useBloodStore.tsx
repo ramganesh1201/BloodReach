@@ -904,6 +904,13 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               return [...res.data!, ...retained];
             });
           }
+        } else if (['coordinator', 'admin', 'blood_centre'].includes(currentRole)) {
+          const res = await emergencyRequestService.getAllEmergencyRequests();
+          if (res.error) {
+            setBackendError(res.error);
+          } else if (res.data) {
+            setRequests(res.data);
+          }
         } else {
           const res = await emergencyRequestService.getMyEmergencyRequests(currentUser.id);
           if (res.error) {
