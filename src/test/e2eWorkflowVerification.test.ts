@@ -493,40 +493,330 @@ describe('CareLoop — End-to-End Workflow Verification Suite', () => {
   /* Step 8: Governance, Access Routing & Form Integrity Verification           */
   /* -------------------------------------------------------------------------- */
   describe('Step 8: Governance, Access Routing & Form Integrity Verification', () => {
-    it('8.1 First-Admin Bootstrap allows initial admin and permanently locks if an admin exists', async () => {
-      // Case A: 0 Admins exist -> Bootstrap succeeds
-      (supabase.rpc as any).mockResolvedValueOnce({
-        data: {
+    it('8.1 First-Admin Bootstrap strictly restricts promotion to allowlisted UUID and email and locks permanently', async () => {
+      const ALLOWLISTED_UUID = '422e76d4-3525-428f-9d8b-160d36da4a62';
+      const ALLOWLISTED_EMAIL = 't3115025@gmail.com';
+
+      // Deterministic simulation of the PL/pgSQL bootstrap_first_admin logic
+      function executeBootstrapProcedure(params: {
+        callerAuthUid: string | null;
+        p_user_id: string | null;
+        authUsers: Array<{ id: string; email: string }>;
+        profiles: Array<{ id: string; role: string }>;
+      }) {
+        // 1. Transaction advisory lock simulated
+        // 2. Authentication Context check
+        if (!params.callerAuthUid || !params.p_user_id || params.p_user_id !== params.callerAuthUid) {
+          return {
+            success: false,
+            message: 'Unauthorized: Caller must be authenticated as the target account.',
+          };
+        }
+
+        // 3. Strict Identity Lock: Check target UUID against exact allowlisted UUID
+        if (params.p_user_id !== ALLOWLISTED_UUID) {
+          return {
+            success: false,
+            message: 'Unauthorized: Account is not authorized to bootstrap initial administrative privileges.',
+          };
+        }
+
+        // 4. Database Email Verification: Check email directly against auth.users
+        const authUser = params.authUsers.find((u) => u.id === params.p_user_id);
+        if (!authUser || authUser.email.toLowerCase() !== ALLOWLISTED_EMAIL) {
+          return {
+            success: false,
+            message: 'Unauthorized: Account email verification failed.',
+          };
+        }
+
+        // 5. Permanent Bootstrap Lock: Verify ZERO administrators currently exist
+        const adminCount = params.profiles.filter((p) => p.role === 'admin').length;
+        if (adminCount > 0) {
+          return {
+            success: false,
+            message: 'Bootstrap locked: System administrator account already provisioned. Subsequent role modifications require admin_set_user_role().',
+          };
+        }
+
+        // 6. Verify target profile exists in public.profiles
+        const profile = params.profiles.find((p) => p.id === params.p_user_id);
+        if (!profile) {
+          return {
+            success: false,
+            message: 'Target user profile not found. User must register before bootstrap.',
+          };
+        }
+
+        // 7. Elevate to admin
+        profile.role = 'admin';
+        return {
           success: true,
           message: 'First administrator successfully provisioned. Bootstrap procedure is now permanently locked.',
-          admin_user_id: 'user-first-admin-uuid',
-        },
-        error: null,
-      });
+          admin_user_id: params.p_user_id,
+          admin_email: authUser.email.toLowerCase(),
+        };
+      }
 
-      const firstBootRes = await supabase.rpc('bootstrap_first_admin', {
-        p_user_id: 'user-first-admin-uuid',
-      });
-      expect(firstBootRes.data?.success).toBe(true);
-      expect(firstBootRes.data?.admin_user_id).toBe('user-first-admin-uuid');
+      // Initial state: target user registered as patient, 0 admins exist
+      const authUsers = [
+        { id: ALLOWLISTED_UUID, email: ALLOWLISTED_EMAIL },
+        { id: '11111111-2222-3333-4444-555555555555', email: 'attacker@evil.com' },
+        { id: '22222222-3333-4444-5555-666666666666', email: 'impostor@gmail.com' },
+      ];
+      const profiles = [
+        { id: ALLOWLISTED_UUID, role: 'patient' },
+        { id: '11111111-2222-3333-4444-555555555555', role: 'patient' },
+        { id: '22222222-3333-4444-5555-666666666666', role: 'patient' },
+      ];
 
-      // Case B: Admin already exists -> Bootstrap permanently aborts
+      // Test 1: Anonymous caller -> rejected
+      const anonResult = executeBootstrapProcedure({
+        callerAuthUid: null,
+        p_user_id: ALLOWLISTED_UUID,
+        authUsers,
+        profiles,
+      });
+      expect(anonResult.success).toBe(false);
+      expect(anonResult.message).toContain('Unauthorized: Caller must be authenticated');
+
+      // Test 2: Attacker with different UUID -> rejected
+      const attackerResult = executeBootstrapProcedure({
+        callerAuthUid: '11111111-2222-3333-4444-555555555555',
+        p_user_id: '11111111-2222-3333-4444-555555555555',
+        authUsers,
+        profiles,
+      });
+      expect(attackerResult.success).toBe(false);
+      expect(attackerResult.message).toContain('Account is not authorized to bootstrap');
+
+      // Test 3: Attacker spoofing caller ID (claims allowlisted UUID while authenticated as attacker) -> rejected
+      const spoofCallerResult = executeBootstrapProcedure({
+        callerAuthUid: '11111111-2222-3333-4444-555555555555',
+        p_user_id: ALLOWLISTED_UUID,
+        authUsers,
+        profiles,
+      });
+      expect(spoofCallerResult.success).toBe(false);
+      expect(spoofCallerResult.message).toContain('Caller must be authenticated as the target account');
+
+      // Test 4: Mismatched email in auth.users -> rejected
+      const mismatchedEmailResult = executeBootstrapProcedure({
+        callerAuthUid: ALLOWLISTED_UUID,
+        p_user_id: ALLOWLISTED_UUID,
+        authUsers: [{ id: ALLOWLISTED_UUID, email: 'tampered@fake.com' }],
+        profiles,
+      });
+      expect(mismatchedEmailResult.success).toBe(false);
+      expect(mismatchedEmailResult.message).toContain('Account email verification failed');
+
+      // Test 5: Allowlisted admin with verified email -> bootstrap succeeds!
+      const validAdminResult = executeBootstrapProcedure({
+        callerAuthUid: ALLOWLISTED_UUID,
+        p_user_id: ALLOWLISTED_UUID,
+        authUsers,
+        profiles,
+      });
+      expect(validAdminResult.success).toBe(true);
+      expect(validAdminResult.admin_user_id).toBe(ALLOWLISTED_UUID);
+      expect(validAdminResult.admin_email).toBe(ALLOWLISTED_EMAIL);
+      expect(profiles.find((p) => p.id === ALLOWLISTED_UUID)?.role).toBe('admin');
+
+      // Test 6: Subsequent bootstrap attempt (by ANYONE, including the same admin) -> permanently locked!
+      const subsequentResult = executeBootstrapProcedure({
+        callerAuthUid: ALLOWLISTED_UUID,
+        p_user_id: ALLOWLISTED_UUID,
+        authUsers,
+        profiles,
+      });
+      expect(subsequentResult.success).toBe(false);
+      expect(subsequentResult.message).toContain('Bootstrap locked: System administrator account already provisioned');
+
+      // Test 7: Attacker attempts bootstrap after initial admin provisioned -> permanently locked
+      const attackerAfterLock = executeBootstrapProcedure({
+        callerAuthUid: '11111111-2222-3333-4444-555555555555',
+        p_user_id: '11111111-2222-3333-4444-555555555555',
+        authUsers,
+        profiles,
+      });
+      expect(attackerAfterLock.success).toBe(false);
+
+      // Verify RPC mock contract matches the hardened response
       (supabase.rpc as any).mockResolvedValueOnce({
-        data: {
-          success: false,
-          message: 'Bootstrap locked: System administrator account already provisioned.',
-        },
+        data: validAdminResult,
         error: null,
       });
-
-      const secondBootRes = await supabase.rpc('bootstrap_first_admin', {
-        p_user_id: 'malicious-attacker-uuid',
+      const rpcSuccess = await supabase.rpc('bootstrap_first_admin', {
+        p_user_id: ALLOWLISTED_UUID,
       });
-      expect(secondBootRes.data?.success).toBe(false);
-      expect(secondBootRes.data?.message).toContain('Bootstrap locked');
+      expect(rpcSuccess.data?.success).toBe(true);
+      expect(rpcSuccess.data?.admin_user_id).toBe(ALLOWLISTED_UUID);
+
+      (supabase.rpc as any).mockResolvedValueOnce({
+        data: attackerResult,
+        error: null,
+      });
+      const rpcAttacker = await supabase.rpc('bootstrap_first_admin', {
+        p_user_id: '11111111-2222-3333-4444-555555555555',
+      });
+      expect(rpcAttacker.data?.success).toBe(false);
+      expect(rpcAttacker.data?.message).toContain('Account is not authorized to bootstrap');
     });
 
-    it('8.2 Blocks direct unauthorized URL navigation across role workspaces', () => {
+    it('8.2 Privilege Escalation Trigger strictly blocks unauthorized mutations and permits authorized bootstrap', () => {
+      const ALLOWLISTED_UUID = '422e76d4-3525-428f-9d8b-160d36da4a62';
+      const ALLOWLISTED_EMAIL = 't3115025@gmail.com';
+
+      // Deterministic simulation of prevent_profile_privilege_escalation()
+      function simulatePrivilegeEscalationTrigger(params: {
+        callerAuthUid: string | null;
+        callerRole: string;
+        isBootstrapInProgress: boolean;
+        oldRecord: { id: string; role: string; status: string };
+        newRecord: { id: string; role: string; status: string };
+        authUsers: Array<{ id: string; email: string }>;
+        profiles: Array<{ id: string; role: string }>;
+      }): { allowed: boolean; error?: string } {
+        if (params.callerAuthUid !== null) {
+          const roleChanged = params.newRecord.role !== params.oldRecord.role;
+          const statusChanged = params.newRecord.status !== params.oldRecord.status;
+          const idChanged = params.newRecord.id !== params.oldRecord.id;
+
+          if (roleChanged || statusChanged || idChanged) {
+            if (params.callerRole !== 'admin') {
+              let isAuthorizedFirstAdmin = false;
+
+              if (
+                params.isBootstrapInProgress &&
+                params.newRecord.role === 'admin' &&
+                params.newRecord.id === ALLOWLISTED_UUID &&
+                params.callerAuthUid === ALLOWLISTED_UUID &&
+                !statusChanged &&
+                !idChanged
+              ) {
+                const otherAdminExists = params.profiles.some(
+                  (p) => p.role === 'admin' && p.id !== ALLOWLISTED_UUID
+                );
+                if (!otherAdminExists) {
+                  const verifiedAuthUser = params.authUsers.find(
+                    (u) => u.id === ALLOWLISTED_UUID && u.email.toLowerCase() === ALLOWLISTED_EMAIL
+                  );
+                  if (verifiedAuthUser) {
+                    isAuthorizedFirstAdmin = true;
+                  }
+                }
+              }
+
+              if (!isAuthorizedFirstAdmin) {
+                return {
+                  allowed: false,
+                  error: 'Unauthorized: Users cannot modify their own role, status, or identity.',
+                };
+              }
+            }
+          }
+        }
+
+        return { allowed: true };
+      }
+
+      const authUsers = [
+        { id: ALLOWLISTED_UUID, email: ALLOWLISTED_EMAIL },
+        { id: 'patient-bob-uuid', email: 'bob@example.com' },
+      ];
+      const profiles = [
+        { id: ALLOWLISTED_UUID, role: 'patient' },
+        { id: 'patient-bob-uuid', role: 'patient' },
+      ];
+
+      // 1. Patient cannot self-promote to admin
+      const patientSelfPromote = simulatePrivilegeEscalationTrigger({
+        callerAuthUid: 'patient-bob-uuid',
+        callerRole: 'patient',
+        isBootstrapInProgress: false,
+        oldRecord: { id: 'patient-bob-uuid', role: 'patient', status: 'ACTIVE' },
+        newRecord: { id: 'patient-bob-uuid', role: 'admin', status: 'ACTIVE' },
+        authUsers,
+        profiles,
+      });
+      expect(patientSelfPromote.allowed).toBe(false);
+      expect(patientSelfPromote.error).toContain('Users cannot modify their own role, status, or identity');
+
+      // 2. Patient cannot change their own account status
+      const patientChangeStatus = simulatePrivilegeEscalationTrigger({
+        callerAuthUid: 'patient-bob-uuid',
+        callerRole: 'patient',
+        isBootstrapInProgress: false,
+        oldRecord: { id: 'patient-bob-uuid', role: 'patient', status: 'ACTIVE' },
+        newRecord: { id: 'patient-bob-uuid', role: 'patient', status: 'SUSPENDED' },
+        authUsers,
+        profiles,
+      });
+      expect(patientChangeStatus.allowed).toBe(false);
+
+      // 3. Other authenticated user cannot pretend to bootstrap
+      const attackerBootstrap = simulatePrivilegeEscalationTrigger({
+        callerAuthUid: 'patient-bob-uuid',
+        callerRole: 'patient',
+        isBootstrapInProgress: true,
+        oldRecord: { id: 'patient-bob-uuid', role: 'patient', status: 'ACTIVE' },
+        newRecord: { id: 'patient-bob-uuid', role: 'admin', status: 'ACTIVE' },
+        authUsers,
+        profiles,
+      });
+      expect(attackerBootstrap.allowed).toBe(false);
+      expect(attackerBootstrap.error).toContain('Users cannot modify their own role, status, or identity');
+
+      // 4. Allowlisted account without bootstrap flag (raw update attempt) is rejected
+      const rawUpdateByAdminCandidate = simulatePrivilegeEscalationTrigger({
+        callerAuthUid: ALLOWLISTED_UUID,
+        callerRole: 'patient',
+        isBootstrapInProgress: false,
+        oldRecord: { id: ALLOWLISTED_UUID, role: 'patient', status: 'ACTIVE' },
+        newRecord: { id: ALLOWLISTED_UUID, role: 'admin', status: 'ACTIVE' },
+        authUsers,
+        profiles,
+      });
+      expect(rawUpdateByAdminCandidate.allowed).toBe(false);
+
+      // 5. Allowlisted account within authorized bootstrap context is ALLOWED
+      const authorizedBootstrapUpdate = simulatePrivilegeEscalationTrigger({
+        callerAuthUid: ALLOWLISTED_UUID,
+        callerRole: 'patient',
+        isBootstrapInProgress: true,
+        oldRecord: { id: ALLOWLISTED_UUID, role: 'patient', status: 'ACTIVE' },
+        newRecord: { id: ALLOWLISTED_UUID, role: 'admin', status: 'ACTIVE' },
+        authUsers,
+        profiles,
+      });
+      expect(authorizedBootstrapUpdate.allowed).toBe(true);
+
+      // 6. Normal profile role/status modifications by an authenticated admin are permitted
+      const adminRoleChange = simulatePrivilegeEscalationTrigger({
+        callerAuthUid: ALLOWLISTED_UUID,
+        callerRole: 'admin',
+        isBootstrapInProgress: false,
+        oldRecord: { id: 'patient-bob-uuid', role: 'patient', status: 'ACTIVE' },
+        newRecord: { id: 'patient-bob-uuid', role: 'coordinator', status: 'ACTIVE' },
+        authUsers,
+        profiles,
+      });
+      expect(adminRoleChange.allowed).toBe(true);
+
+      // 7. Non-privileged updates (e.g. name or phone only) by regular users are permitted
+      const ordinaryProfileUpdate = simulatePrivilegeEscalationTrigger({
+        callerAuthUid: 'patient-bob-uuid',
+        callerRole: 'patient',
+        isBootstrapInProgress: false,
+        oldRecord: { id: 'patient-bob-uuid', role: 'patient', status: 'ACTIVE' },
+        newRecord: { id: 'patient-bob-uuid', role: 'patient', status: 'ACTIVE' },
+        authUsers,
+        profiles,
+      });
+      expect(ordinaryProfileUpdate.allowed).toBe(true);
+    });
+
+    it('8.3 Blocks direct unauthorized URL navigation across role workspaces', () => {
       // Patient cannot access Admin or Coordinator workspaces
       expect(isRouteAllowedForRole('/admin', 'patient')).toBe(false);
       expect(isRouteAllowedForRole('/coordinator', 'patient')).toBe(false);

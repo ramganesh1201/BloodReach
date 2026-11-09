@@ -18,6 +18,9 @@ const TrackRequestView = lazy(() => import('./views/TrackRequestView').then(m =>
 const DonorView = lazy(() => import('./views/DonorView').then(m => ({ default: m.DonorView })));
 const BloodCentreView = lazy(() => import('./views/BloodCentreView').then(m => ({ default: m.BloodCentreView })));
 const CoordinatorView = lazy(() => import('./views/CoordinatorView').then(m => ({ default: m.CoordinatorView })));
+const HospitalView = lazy(() => import('./views/HospitalView').then(m => ({ default: m.HospitalView })));
+const HospitalRegisterView = lazy(() => import('./views/HospitalRegisterView').then(m => ({ default: m.HospitalRegisterView })));
+const SmsResponseView = lazy(() => import('./views/SmsResponseView').then(m => ({ default: m.SmsResponseView })));
 const AdminView = lazy(() => import('./views/AdminView').then(m => ({ default: m.AdminView })));
 const CommunicationView = lazy(() => import('./views/CommunicationView').then(m => ({ default: m.CommunicationView })));
 
@@ -52,6 +55,12 @@ export const App: React.FC = () => {
                 <Route path="/request/confirm/:id" element={<RequestConfirmView />} />
                 <Route path="/request/track" element={<TrackRequestView />} />
                 <Route path="/request/track/:id" element={<TrackRequestView />} />
+
+                {/* Emergency Response Token Link (DLT/SMS single-use callback) */}
+                <Route path="/respond/:token" element={<SmsResponseView />} />
+
+                {/* Hospital Registration (Public / Institutional) */}
+                <Route path="/hospital/register" element={<HospitalRegisterView />} />
 
                 {/* Patient / Attendant Workspace */}
                 <Route
@@ -93,6 +102,16 @@ export const App: React.FC = () => {
                   }
                 />
 
+                {/* Hospital Operations Workspace */}
+                <Route
+                  path="/hospital"
+                  element={
+                    <RoleGuard allowedRoles={['hospital', 'blood_centre', 'coordinator', 'admin']}>
+                      <HospitalView />
+                    </RoleGuard>
+                  }
+                />
+
                 {/* System Administrator Workspace */}
                 <Route
                   path="/admin"
@@ -107,7 +126,7 @@ export const App: React.FC = () => {
                 <Route
                   path="/communication"
                   element={
-                    <RoleGuard allowedRoles={['patient', 'donor', 'blood_centre', 'coordinator', 'admin']}>
+                    <RoleGuard allowedRoles={['patient', 'donor', 'blood_centre', 'hospital', 'coordinator', 'admin']}>
                       <CommunicationView />
                     </RoleGuard>
                   }

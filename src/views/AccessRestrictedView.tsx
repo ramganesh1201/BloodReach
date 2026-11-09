@@ -16,6 +16,7 @@ const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
   blood_centre: 'Blood Centre',
   coordinator: 'Coordinator',
   admin: 'Administrator',
+  hospital: 'Hospital Operations',
 };
 
 export const AccessRestrictedView: React.FC<AccessRestrictedViewProps> = ({ allowedRoles }) => {

@@ -30,6 +30,7 @@ export const DEFAULT_WORKSPACE_BY_ROLE: Record<UserRole, string> = {
   blood_centre: '/blood-centre',
   coordinator: '/coordinator',
   admin: '/admin',
+  hospital: '/hospital',
 };
 
 export const ROLE_DEFAULT_ROUTES = DEFAULT_WORKSPACE_BY_ROLE;
@@ -65,6 +66,12 @@ export const DESKTOP_NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { path: '/blood-centre', label: 'Centres', icon: Building2 },
     { path: '/communication', label: 'Communication', icon: MessageSquare },
   ],
+  hospital: [
+    { path: '/', label: 'Home', icon: Home, exact: true },
+    { path: '/hospital', label: 'Hospital Workspace', icon: Building2 },
+    { path: '/request', label: 'Create Request', icon: Droplet },
+    { path: '/communication', label: 'Communication', icon: MessageSquare },
+  ],
 };
 
 export const MOBILE_NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
@@ -96,17 +103,24 @@ export const MOBILE_NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { path: '/coordinator', label: 'Control', icon: Activity },
     { path: '/communication', label: 'Messages', icon: MessageSquare },
   ],
+  hospital: [
+    { path: '/', label: 'Home', icon: Home, exact: true },
+    { path: '/hospital', label: 'Hospital', icon: Building2 },
+    { path: '/request', label: 'Request', icon: Droplet },
+    { path: '/communication', label: 'Messages', icon: MessageSquare },
+  ],
 };
 
 export const ROLE_ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
-  '/': ['patient', 'donor', 'blood_centre', 'coordinator', 'admin'],
+  '/': ['patient', 'donor', 'blood_centre', 'coordinator', 'admin', 'hospital'],
   '/patient': ['patient', 'coordinator', 'admin'],
-  '/request': ['patient', 'coordinator', 'admin'],
+  '/request': ['patient', 'coordinator', 'admin', 'hospital'],
   '/donor': ['donor', 'coordinator', 'admin'],
   '/blood-centre': ['blood_centre', 'coordinator', 'admin'],
   '/coordinator': ['coordinator', 'admin'],
   '/admin': ['admin'],
-  '/communication': ['patient', 'donor', 'blood_centre', 'coordinator', 'admin'],
+  '/hospital': ['hospital', 'blood_centre', 'coordinator', 'admin'],
+  '/communication': ['patient', 'donor', 'blood_centre', 'coordinator', 'admin', 'hospital'],
 };
 
 export function isRouteAllowedForRole(pathname: string, role: UserRole): boolean {
@@ -117,6 +131,7 @@ export function isRouteAllowedForRole(pathname: string, role: UserRole): boolean
   if (pathname.startsWith('/blood-centre')) return ROLE_ROUTE_PERMISSIONS['/blood-centre'].includes(role);
   if (pathname.startsWith('/coordinator')) return ROLE_ROUTE_PERMISSIONS['/coordinator'].includes(role);
   if (pathname.startsWith('/admin')) return ROLE_ROUTE_PERMISSIONS['/admin'].includes(role);
+  if (pathname.startsWith('/hospital')) return ROLE_ROUTE_PERMISSIONS['/hospital'].includes(role);
   if (pathname.startsWith('/communication')) return ROLE_ROUTE_PERMISSIONS['/communication'].includes(role);
   return true;
 }

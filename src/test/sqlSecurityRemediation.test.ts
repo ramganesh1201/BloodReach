@@ -13,6 +13,7 @@ const MIGRATION_1_PATH = path.resolve(__dirname, '../../supabase/migrations/2026
 const MIGRATION_2_PATH = path.resolve(__dirname, '../../supabase/migrations/20261103000002_communication_system.sql');
 const MIGRATION_3_PATH = path.resolve(__dirname, '../../supabase/migrations/20261103000003_secure_voice_calling.sql');
 const MIGRATION_4_PATH = path.resolve(__dirname, '../../supabase/migrations/20261103000004_notifications_and_storage.sql');
+const MIGRATION_18_PATH = path.resolve(__dirname, '../../supabase/migrations/20261108190000_donor_onboarding_and_notification_triggers.sql');
 const SCHEMA_SQL_PATH = path.resolve(__dirname, '../../supabase/schema.sql');
 
 describe('CareLoop SQL Security Remediation — Static Architecture & Schema Assertions', () => {
@@ -20,6 +21,7 @@ describe('CareLoop SQL Security Remediation — Static Architecture & Schema Ass
   const mig2 = fs.readFileSync(MIGRATION_2_PATH, 'utf-8');
   const mig3 = fs.readFileSync(MIGRATION_3_PATH, 'utf-8');
   const mig4 = fs.readFileSync(MIGRATION_4_PATH, 'utf-8');
+  const mig18 = fs.readFileSync(MIGRATION_18_PATH, 'utf-8');
   const schema = fs.readFileSync(SCHEMA_SQL_PATH, 'utf-8');
 
   it('Issue 1: Donor acceptance and system message authorization are protected and decoupled', () => {
@@ -148,6 +150,64 @@ describe('CareLoop SQL Security Remediation — Static Architecture & Schema Ass
 
     expect(mig1).toContain('REVOKE UPDATE, DELETE ON public.audit_logs FROM PUBLIC, authenticated, anon;');
     expect(schema).toContain('REVOKE UPDATE, DELETE ON public.audit_logs FROM PUBLIC, authenticated, anon;');
+  });
+
+  it('Issue 8: Migration 18 first-admin bootstrap is strictly locked to allowlisted UUID and email with database auth.users verification', () => {
+    // 1. Must define allowlisted UUID constant
+    expect(mig18).toContain("c_allowlisted_uuid CONSTANT UUID := '422e76d4-3525-428f-9d8b-160d36da4a62'::UUID;");
+
+    // 2. Must define allowlisted email constant
+    expect(mig18).toContain("c_allowlisted_email CONSTANT TEXT := 't3115025@gmail.com';");
+
+    // 3. Must verify against auth.users (not client metadata)
+    expect(mig18).toContain('FROM auth.users');
+    expect(mig18).toContain('SELECT LOWER(email) INTO v_auth_email');
+
+    // 4. Must enforce transaction advisory lock for concurrency
+    expect(mig18).toContain("PERFORM pg_advisory_xact_lock(hashtext('careloop_bootstrap_first_admin'));");
+
+    // 5. Must reject caller if not authenticated or not matching p_user_id
+    expect(mig18).toContain('IF auth.uid() IS NULL OR p_user_id IS NULL OR p_user_id != auth.uid() THEN');
+
+    // 6. Must reject any UUID that does not match the allowlist
+    expect(mig18).toContain('IF p_user_id != c_allowlisted_uuid THEN');
+
+    // 7. Must reject any email that does not match the allowlist
+    expect(mig18).toContain('IF v_auth_email IS NULL OR v_auth_email != c_allowlisted_email THEN');
+
+    // 8. Must permanently lock if ANY administrator exists across the system
+    expect(mig18).toContain("SELECT COUNT(*) INTO v_admin_count FROM public.profiles WHERE role = 'admin';");
+
+    // 9. Must revoke execute from PUBLIC and anon, granting only to authenticated and service_role
+    expect(mig18).toContain('REVOKE ALL ON FUNCTION public.bootstrap_first_admin(UUID) FROM PUBLIC, anon;');
+    expect(mig18).toContain('GRANT EXECUTE ON FUNCTION public.bootstrap_first_admin(UUID) TO authenticated, service_role;');
+  });
+
+  it('Issue 9: Migration 18 profile privilege-escalation trigger safely allows authorized bootstrap via transaction-local setting while keeping general protections active', () => {
+    // 1. Must replace prevent_profile_privilege_escalation function
+    expect(mig18).toContain('CREATE OR REPLACE FUNCTION public.prevent_profile_privilege_escalation()');
+
+    // 2. Must use transaction-local setting careloop.first_admin_bootstrap_in_progress
+    expect(mig18).toContain("current_setting('careloop.first_admin_bootstrap_in_progress', true)");
+    expect(mig18).toContain("PERFORM set_config('careloop.first_admin_bootstrap_in_progress', 'true', true);");
+    expect(mig18).toContain("PERFORM set_config('careloop.first_admin_bootstrap_in_progress', 'false', true);");
+
+    // 3. Must check allowlisted UUID and email in the trigger function as well
+    expect(mig18).toContain("c_allowlisted_uuid CONSTANT UUID := '422e76d4-3525-428f-9d8b-160d36da4a62'::UUID;");
+    expect(mig18).toContain("c_allowlisted_email CONSTANT TEXT := 't3115025@gmail.com';");
+
+    // 4. Must ensure no other admins exist across the system
+    expect(mig18).toContain("NOT EXISTS (SELECT 1 FROM public.profiles WHERE role = 'admin' AND id <> c_allowlisted_uuid)");
+
+    // 5. Must re-verify email in auth.users directly
+    expect(mig18).toContain("SELECT 1 FROM auth.users\n                            WHERE id = c_allowlisted_uuid\n                              AND LOWER(email) = c_allowlisted_email");
+
+    // 6. Must still reject unauthorized mutations with standard message
+    expect(mig18).toContain("RAISE EXCEPTION 'Unauthorized: Users cannot modify their own role, status, or identity.';");
+
+    // 7. Must attach trigger to profiles BEFORE UPDATE
+    expect(mig18).toContain('DROP TRIGGER IF EXISTS trg_prevent_profile_privilege_escalation ON public.profiles;');
+    expect(mig18).toContain('CREATE TRIGGER trg_prevent_profile_privilege_escalation');
   });
 });
 

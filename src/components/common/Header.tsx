@@ -29,6 +29,7 @@ const PUBLIC_DESKTOP_NAV = [
   { path: '/', label: 'Home', icon: Home, exact: true },
   { path: '/request', label: 'Request Blood', icon: Droplet },
   { path: '/request/track', label: 'Track Request', icon: Search },
+  { path: '/hospital/register', label: 'Hospital Portal', icon: Building2 },
 ];
 
 const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
@@ -37,6 +38,7 @@ const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
   blood_centre: 'Blood Centre Staff',
   coordinator: 'Clinical Coordinator',
   admin: 'System Administrator',
+  hospital: 'Hospital Operations',
 };
 
 export const Header: React.FC = () => {

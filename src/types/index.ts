@@ -19,9 +19,9 @@ export type EmergencyStatus =
   | 'CANCELLED'
   | 'EXPIRED';
 
-export type UserRole = 'patient' | 'donor' | 'blood_centre' | 'coordinator' | 'admin';
+export type UserRole = 'patient' | 'donor' | 'blood_centre' | 'coordinator' | 'admin' | 'hospital';
 
-export type DemoExperience = 'patient' | 'donor' | 'blood_centre' | 'coordinator' | null;
+export type DemoExperience = 'patient' | 'donor' | 'blood_centre' | 'coordinator' | 'hospital' | null;
 
 export interface EmergencyRequest {
   id: string;
@@ -163,7 +163,20 @@ export interface EscalationConfig {
 }
 
 export type NotificationChannel = 'IN_APP' | 'SMS' | 'PUSH' | 'EMAIL';
-export type NotificationStatus = 'PENDING' | 'QUEUED' | 'ATTEMPTED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'ACKNOWLEDGED';
+export type NotificationStatus =
+  | 'NEW'
+  | 'PENDING'
+  | 'QUEUED'
+  | 'ATTEMPTED'
+  | 'SENT'
+  | 'DELIVERED'
+  | 'READ'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'EXPIRED'
+  | 'CANCELLED'
+  | 'FAILED'
+  | 'ACKNOWLEDGED';
 
 export interface NotificationPayload {
   id: string;
@@ -393,3 +406,5 @@ export interface UserProfile {
   createdAt: string;
   updatedAt: string;
 }
+
+export * from './hospital';

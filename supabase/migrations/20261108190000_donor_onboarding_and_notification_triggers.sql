@@ -62,7 +62,78 @@ END $$;
 
 
 -- ============================================================================
--- 2. SECURE FIRST-ADMIN BOOTSTRAP STORED PROCEDURE
+-- 2. PROFILE PRIVILEGE ESCALATION TRIGGER FUNCTION (FIRST-ADMIN BOOTSTRAP AWARE)
+-- ============================================================================
+-- SECURITY MANDATE:
+-- Preserves existing privilege-escalation prevention: ordinary users cannot modify
+-- their own role, status, or identity. Allows ONLY the authorized first-admin
+-- bootstrap operation for allowlisted UUID '422e76d4-3525-428f-9d8b-160d36da4a62'
+-- and verified auth.users email 't3115025@gmail.com' when zero admins exist.
+CREATE OR REPLACE FUNCTION public.prevent_profile_privilege_escalation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_is_bootstrap_in_progress BOOLEAN;
+    v_is_authorized_first_admin BOOLEAN := FALSE;
+    c_allowlisted_uuid CONSTANT UUID := '422e76d4-3525-428f-9d8b-160d36da4a62'::UUID;
+    c_allowlisted_email CONSTANT TEXT := 't3115025@gmail.com';
+BEGIN
+    IF auth.uid() IS NOT NULL THEN
+        -- Check if role, status, or identity is being modified
+        IF (NEW.role IS DISTINCT FROM OLD.role OR NEW.status IS DISTINCT FROM OLD.status OR NEW.id IS DISTINCT FROM OLD.id) THEN
+            -- If caller is not already an administrator, evaluate privilege escalation
+            IF public.get_user_role() <> 'admin' THEN
+                -- Check for transaction-scoped first-admin bootstrap context
+                v_is_bootstrap_in_progress := (COALESCE(current_setting('careloop.first_admin_bootstrap_in_progress', true), 'false') = 'true');
+
+                -- Narrowly scoped exception: ONLY valid if ALL bootstrap criteria are strictly satisfied
+                IF v_is_bootstrap_in_progress
+                   AND NEW.role = 'admin'
+                   AND NEW.id = c_allowlisted_uuid
+                   AND auth.uid() = c_allowlisted_uuid
+                   AND (NEW.status IS NOT DISTINCT FROM OLD.status)
+                   AND (NEW.id IS NOT DISTINCT FROM OLD.id)
+                THEN
+                    -- Verify ZERO administrators currently exist across the entire system (excluding target)
+                    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE role = 'admin' AND id <> c_allowlisted_uuid) THEN
+                        -- Verify email directly from auth.users (NEVER client-supplied metadata)
+                        IF EXISTS (
+                            SELECT 1 FROM auth.users
+                            WHERE id = c_allowlisted_uuid
+                              AND LOWER(email) = c_allowlisted_email
+                        ) THEN
+                            v_is_authorized_first_admin := TRUE;
+                        END IF;
+                    END IF;
+                END IF;
+
+                -- If not an authorized first-admin bootstrap and caller is not admin, reject unconditionally
+                IF NOT v_is_authorized_first_admin THEN
+                    RAISE EXCEPTION 'Unauthorized: Users cannot modify their own role, status, or identity.';
+                END IF;
+            END IF;
+        END IF;
+    END IF;
+
+    NEW.updated_at := NOW();
+    RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.prevent_profile_privilege_escalation() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.prevent_profile_privilege_escalation() TO authenticated, service_role;
+
+DROP TRIGGER IF EXISTS trg_prevent_profile_privilege_escalation ON public.profiles;
+CREATE TRIGGER trg_prevent_profile_privilege_escalation
+    BEFORE UPDATE ON public.profiles
+    FOR EACH ROW EXECUTE FUNCTION public.prevent_profile_privilege_escalation();
+
+
+-- ============================================================================
+-- 3. SECURE FIRST-ADMIN BOOTSTRAP STORED PROCEDURE
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.bootstrap_first_admin(p_user_id UUID)
 RETURNS JSONB
@@ -72,28 +143,51 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
     v_admin_count INTEGER;
+    v_auth_email TEXT;
+    c_allowlisted_uuid CONSTANT UUID := '422e76d4-3525-428f-9d8b-160d36da4a62'::UUID;
+    c_allowlisted_email CONSTANT TEXT := 't3115025@gmail.com';
 BEGIN
     -- 1. Concurrency Guard: Serialize concurrent bootstrap invocations with transaction advisory lock
     PERFORM pg_advisory_xact_lock(hashtext('careloop_bootstrap_first_admin'));
 
-    -- 2. Authentication Context: Caller can only bootstrap their own authenticated account
-    IF p_user_id IS NULL OR p_user_id != auth.uid() THEN
+    -- 2. Authentication Context: Reject anonymous callers and ensure caller matches p_user_id
+    IF auth.uid() IS NULL OR p_user_id IS NULL OR p_user_id != auth.uid() THEN
         RETURN jsonb_build_object(
             'success', false,
-            'message', 'Unauthorized: Caller can only bootstrap their own authenticated account.'
+            'message', 'Unauthorized: Caller must be authenticated as the target account.'
         );
     END IF;
 
-    -- 3. Security Gate: Verify ZERO administrators currently exist across the entire system
+    -- 3. Strict Identity Lock: Check target UUID against exact allowlisted UUID
+    IF p_user_id != c_allowlisted_uuid THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Unauthorized: Account is not authorized to bootstrap initial administrative privileges.'
+        );
+    END IF;
+
+    -- 4. Database Email Verification: Check email directly against auth.users (NEVER trust client metadata)
+    SELECT LOWER(email) INTO v_auth_email
+    FROM auth.users
+    WHERE id = p_user_id;
+
+    IF v_auth_email IS NULL OR v_auth_email != c_allowlisted_email THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Unauthorized: Account email verification failed.'
+        );
+    END IF;
+
+    -- 5. Permanent Bootstrap Lock: Verify ZERO administrators currently exist across the entire system
     SELECT COUNT(*) INTO v_admin_count FROM public.profiles WHERE role = 'admin';
     IF v_admin_count > 0 THEN
         RETURN jsonb_build_object(
             'success', false,
-            'message', 'Bootstrap locked: System administrator account already provisioned.'
+            'message', 'Bootstrap locked: System administrator account already provisioned. Subsequent role modifications require admin_set_user_role().'
         );
     END IF;
 
-    -- 4. Verify target user profile exists (registered via standard Supabase Auth)
+    -- 6. Verify target user profile exists (registered via standard Supabase Auth)
     IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = p_user_id) THEN
         RETURN jsonb_build_object(
             'success', false,
@@ -101,29 +195,46 @@ BEGIN
         );
     END IF;
 
-    -- 5. Elevate initial user to admin role
+    -- 7. Activate transaction-local bootstrap authorization for trg_prevent_profile_privilege_escalation
+    PERFORM set_config('careloop.first_admin_bootstrap_in_progress', 'true', true);
+
+    -- 8. Elevate initial allowlisted user to admin role
     UPDATE public.profiles
     SET role = 'admin', updated_at = NOW()
     WHERE id = p_user_id;
 
-    -- 6. Record immutable audit entry
+    -- 9. Deactivate transaction-local bootstrap authorization
+    PERFORM set_config('careloop.first_admin_bootstrap_in_progress', 'false', true);
+
+    -- 10. Record immutable audit entry
     INSERT INTO public.audit_logs (user_id, action, target_table, target_id, details)
-    VALUES (p_user_id, 'FIRST_ADMIN_BOOTSTRAP', 'profiles', p_user_id::text, jsonb_build_object('bootstrapped_at', NOW()));
+    VALUES (
+        p_user_id,
+        'FIRST_ADMIN_BOOTSTRAP',
+        'profiles',
+        p_user_id::text,
+        jsonb_build_object(
+            'bootstrapped_at', NOW(),
+            'email', v_auth_email,
+            'auth_uid', p_user_id
+        )
+    );
 
     RETURN jsonb_build_object(
         'success', true,
         'message', 'First administrator successfully provisioned. Bootstrap procedure is now permanently locked.',
-        'admin_user_id', p_user_id
+        'admin_user_id', p_user_id,
+        'admin_email', v_auth_email
     );
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.bootstrap_first_admin(UUID) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.bootstrap_first_admin(UUID) TO authenticated;
+REVOKE ALL ON FUNCTION public.bootstrap_first_admin(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.bootstrap_first_admin(UUID) TO authenticated, service_role;
 
 
 -- ============================================================================
--- 3. TRIGGER FUNCTION: DONOR ONBOARDING -> NOTIFY COORDINATORS & ADMINS
+-- 4. TRIGGER FUNCTION: DONOR ONBOARDING -> NOTIFY COORDINATORS & ADMINS
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.on_donor_onboarding_notify()
 RETURNS TRIGGER
@@ -168,7 +279,7 @@ $$;
 
 
 -- ============================================================================
--- 4. TRIGGER FUNCTION: EMERGENCY REQUEST CREATED -> NOTIFY COMPATIBLE DONORS
+-- 5. TRIGGER FUNCTION: EMERGENCY REQUEST CREATED -> NOTIFY COMPATIBLE DONORS
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.on_emergency_request_created_notify_donors()
 RETURNS TRIGGER
@@ -291,7 +402,7 @@ $$;
 
 
 -- ============================================================================
--- 5. TRIGGER FUNCTION: REQUEST STATUS UPDATED -> NOTIFY REQUESTING PATIENT
+-- 6. TRIGGER FUNCTION: REQUEST STATUS UPDATED -> NOTIFY REQUESTING PATIENT
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.on_emergency_request_updated_notify_requester()
 RETURNS TRIGGER
@@ -334,8 +445,13 @@ $$;
 
 
 -- ============================================================================
--- 6. TRIGGER ATTACHMENTS
+-- 7. TRIGGER ATTACHMENTS
 -- ============================================================================
+
+DROP TRIGGER IF EXISTS trg_prevent_profile_privilege_escalation ON public.profiles;
+CREATE TRIGGER trg_prevent_profile_privilege_escalation
+    BEFORE UPDATE ON public.profiles
+    FOR EACH ROW EXECUTE FUNCTION public.prevent_profile_privilege_escalation();
 
 DROP TRIGGER IF EXISTS trg_donor_onboarding_notify ON public.donors;
 CREATE TRIGGER trg_donor_onboarding_notify
@@ -356,7 +472,7 @@ CREATE TRIGGER trg_request_updated_notify_requester
     EXECUTE FUNCTION public.on_emergency_request_updated_notify_requester();
 
 -- ============================================================================
--- 7. SECURITY & RATE-LIMITING AUDIT NOTES
+-- 8. SECURITY & RATE-LIMITING AUDIT NOTES
 -- ============================================================================
 -- A. GUEST SUBMISSION RATE-LIMITING BLOCKER:
 --    Unauthenticated guest RPCs (submit_guest_emergency_request) cannot rely
@@ -371,9 +487,11 @@ CREATE TRIGGER trg_request_updated_notify_requester
 --    to user_id = auth.uid(). Direct client INSERTs on notifications remain revoked.
 --
 -- C. FIRST-ADMIN BOOTSTRAP SECURITY:
---    bootstrap_first_admin() permanently aborts if COUNT(*) of profiles with
---    role = 'admin' > 0. Once initialized, subsequent administrative promotions
---    require an authenticated admin calling admin_set_user_role().
+--    bootstrap_first_admin() is strictly restricted to allowlisted UUID
+--    '422e76d4-3525-428f-9d8b-160d36da4a62' and allowlisted email 't3115025@gmail.com'
+--    verified against auth.users (not client metadata). It permanently aborts if COUNT(*)
+--    of profiles with role = 'admin' > 0. Once initialized, subsequent administrative
+--    promotions require an authenticated admin calling admin_set_user_role().
 --
 -- D. CLINICAL SAFETY (NBTC 2023):
 --    Trigger notifications do NOT guarantee transfusion clearance. Mandatory

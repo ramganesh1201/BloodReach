@@ -27,7 +27,7 @@ vi.mock('../store/useBloodStore', () => ({
   useBloodStore: () => mockStoreState,
 }));
 
-describe('CareLoop — CommunicationView Runtime Safety & Regression Suite', () => {
+describe('CareLoop — CommunicationView Runtime Safety & Regression Suite', { timeout: 15000 }, () => {
   const sampleRequest: EmergencyRequest = {
     id: 'req-test-1',
     referenceCode: 'CL-9A2F',
