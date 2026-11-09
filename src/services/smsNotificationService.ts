@@ -44,7 +44,7 @@ export interface SmsDispatchResult {
   token: string;
   responseUrl: string;
   formattedMessage: string;
-  status: 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'PENDING';
+  status: 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'PENDING' | 'PENDING_CONFIGURATION' | 'RATE_LIMITED' | 'SENDING';
   carrierConfigured?: boolean;
   error?: string;
 }
@@ -119,6 +119,27 @@ class SmsNotificationService {
     } catch (e) {
       console.warn('[SmsNotificationService] Failed to persist SMS tokens:', e);
     }
+  }
+
+  /**
+   * Masks phone numbers for privacy in logs: +91 98490 12345 -> +91 ******2345
+   */
+  public maskPhoneNumber(phone?: string): string {
+    if (!phone) return 'REDACTED';
+    const clean = phone.trim();
+    if (clean.length <= 4) return '****';
+    const lastFour = clean.slice(-4);
+    const prefix = clean.startsWith('+') ? clean.slice(0, 3) : '';
+    return `${prefix} ******${lastFour}`;
+  }
+
+  /**
+   * Truncates sensitive single-use response tokens in logs: tok_abc123...
+   */
+  public truncateToken(token?: string): string {
+    if (!token) return 'null';
+    if (token.length <= 8) return 'tok_***';
+    return `${token.slice(0, 8)}...`;
   }
 
   /**
@@ -306,14 +327,81 @@ class SmsNotificationService {
     const messageId = `sms-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     this.recordRateLimitDispatch(options.donorId);
 
+    let serverDispatchStatus: SmsDispatchResult['status'] = 'PENDING';
+    let carrierConfigured = false;
+    let serverMessageId = messageId;
+    let serverError: string | undefined;
+
+    // Dispatch via server-side endpoint (/api/dispatch-sms) to ensure secrets never touch the browser
+    try {
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined' && import.meta.env?.MODE !== 'test') {
+        let authHeader = '';
+        if (isSupabaseConfigured) {
+          try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            if (sessionData?.session?.access_token) {
+              authHeader = `Bearer ${sessionData.session.access_token}`;
+            }
+          } catch {
+            // Auth token extraction is non-blocking
+          }
+        }
+
+        const endpoint = '/api/dispatch-sms';
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader ? { Authorization: authHeader } : {}),
+            'X-Idempotency-Key': `${options.requestId}_${options.donorId}_${tokenPayload.token}`,
+          },
+          body: JSON.stringify({
+            donorId: options.donorId,
+            requestId: options.requestId,
+            referenceCode: options.referenceCode,
+            recipientPhone: options.recipientPhone,
+            formattedMessage,
+            responseUrl,
+            token: tokenPayload.token,
+            urgency: options.urgency,
+            bloodGroup: options.bloodGroup,
+            component: options.component,
+            hospitalName: options.hospitalName,
+          }),
+        });
+
+        if (response.ok) {
+          const resData = await response.json();
+          serverDispatchStatus = resData.status || (resData.carrierConfigured ? 'SENT' : 'PENDING');
+          carrierConfigured = Boolean(resData.carrierConfigured);
+          if (resData.messageId) serverMessageId = resData.messageId;
+        } else if (response.status === 429) {
+          serverDispatchStatus = 'RATE_LIMITED';
+          serverError = 'Server rate limit exceeded: Maximum 3 SMS alerts per hour.';
+        } else {
+          // If server returns pending carrier config or other status
+          const errData = await response.json().catch(() => ({}));
+          serverDispatchStatus = errData.status || 'PENDING';
+          carrierConfigured = false;
+          serverError = errData.error;
+        }
+      }
+    } catch {
+      // In local unit testing, happy-dom, or when server is unavailable,
+      // preserve status as PENDING without throwing or breaking workflows.
+      serverDispatchStatus = 'PENDING';
+      carrierConfigured = false;
+    }
+
     const result: SmsDispatchResult = {
-      success: true,
-      messageId,
+      success: serverDispatchStatus !== 'FAILED',
+      messageId: serverMessageId,
       token: tokenPayload.token,
       responseUrl,
       formattedMessage,
-      status: 'PENDING', // Integration-Pending: Cellular gateway credentials pending configuration
-      carrierConfigured: false,
+      status: serverDispatchStatus,
+      carrierConfigured,
+      error: serverError,
     };
 
     this.dispatchLog.unshift(result);
