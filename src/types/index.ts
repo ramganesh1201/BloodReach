@@ -193,6 +193,27 @@ export interface NotificationPayload {
   metadata?: Record<string, any>;
 }
 
+export interface DeviceTokenRecord {
+  id: string;
+  userId: string;
+  token: string;
+  platform: 'web' | 'android' | 'ios';
+  userAgent?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PushPermissionStatus = 'granted' | 'denied' | 'default' | 'unsupported' | 'not_configured';
+
+export interface PushNotificationState {
+  isSupported: boolean;
+  isConfigured: boolean;
+  permission: PushPermissionStatus;
+  token: string | null;
+  loading: boolean;
+  error: string | null;
+}
+
 export type MessageDeliveryStatus = 'SENT' | 'DELIVERED' | 'READ';
 
 export interface RequestMessage {

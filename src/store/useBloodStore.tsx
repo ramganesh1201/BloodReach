@@ -39,6 +39,7 @@ import { detectShortage } from '../services/shortageEngine';
 import { findPotentialResponders, evaluateDonorEligibility } from '../services/matchingEngine';
 import { evaluateEscalationNeed } from '../services/escalationEngine';
 import { notificationService } from '../services/notificationService';
+import { fcmService } from '../services/fcmService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { webRtcService } from '../services/webRtcService';
 import { callSignalingService } from '../services/callSignalingService';
@@ -1762,6 +1763,28 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       `Emergency request ${created.referenceCode} created and stored in clinical registry.`,
       'Patient Attendant'
     );
+
+    // Non-blocking Web Push notification trigger to clinically matched donors
+    try {
+      const candidateMatches = findPotentialResponders(created, donors);
+      const matchedUserIds = candidateMatches
+        .map((m) => m.donor.profileId || m.donor.id)
+        .filter((id): id is string => Boolean(id));
+
+      if (matchedUserIds.length > 0) {
+        fcmService.dispatchPushToMatchedDonors({
+          requestId: created.id,
+          referenceCode: created.referenceCode,
+          bloodGroup: created.bloodGroup,
+          component: created.component,
+          hospitalName: created.hospitalName,
+          city: created.city,
+          recipientUserIds: matchedUserIds,
+        }).catch(() => {});
+      }
+    } catch {
+      // Non-blocking: push alert failure never prevents request creation or local store update
+    }
 
     return { success: true, data: created };
   };

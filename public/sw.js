@@ -1,5 +1,13 @@
-// Service Worker for BloodReach PWA offline shell support
-const CACHE_NAME = 'bloodreach-cache-v1';
+// Service Worker for BloodReach / CareLoop PWA offline shell support
+// Integrates with Firebase Cloud Messaging background handler
+
+try {
+  importScripts('/firebase-messaging-sw.js');
+} catch (e) {
+  // Fallback if running offline or firebase script unavailable
+}
+
+const CACHE_NAME = 'bloodreach-cache-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -33,24 +41,36 @@ self.addEventListener('fetch', (event) => {
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
+  // Network-first for navigation requests and index.html to prevent stale chunk hash mismatches
+  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  // Cache-first for immutable static assets (/assets/*, favicon, manifest)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Return cached shell, update in background
-        fetch(event.request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-            }
-          })
-          .catch(() => {/* Offline fallback active */});
         return cachedResponse;
       }
-      return fetch(event.request).catch(() => {
-        // Return offline shell fallback for navigation requests
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
+      return fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && (url.pathname.startsWith('/assets/') || url.pathname.endsWith('.svg') || url.pathname.endsWith('.json'))) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
+        return networkResponse;
       });
     })
   );

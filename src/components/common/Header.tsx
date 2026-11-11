@@ -5,12 +5,15 @@ import { UserRole } from '../../types';
 import { DESKTOP_NAV_BY_ROLE } from '../../config/navigation';
 import { AuthModal } from './AuthModal';
 import { DonorOnboardingModal } from '../donor/DonorOnboardingModal';
+import { fcmService } from '../../services/fcmService';
 import {
   Menu,
   X,
   LogOut,
   Shield,
   Bell,
+  BellRing,
+  AlertCircle,
   Droplet,
   User,
   Heart,
@@ -98,12 +101,26 @@ export const Header: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const [pushState, setPushState] = useState(fcmService.getState());
+
+  useEffect(() => {
+    const unsubscribe = fcmService.subscribeToPushState((state) => {
+      setPushState(state);
+    });
+    return unsubscribe;
+  }, []);
+
+  const handleEnablePush = async () => {
+    await fcmService.requestPermissionAndGetToken(currentUser?.id);
+  };
+
   const handleExitDemo = () => {
     exitDemoMode();
     navigate('/');
   };
 
   const handleSignOut = async () => {
+    await fcmService.unregisterDeviceToken(currentUser?.id);
     await signOut();
     setProfileDropdownOpen(false);
     navigate('/');
@@ -264,6 +281,51 @@ export const Header: React.FC = () => {
                           Mark all acknowledged
                         </button>
                       </div>
+
+                      {/* Push Notification Activation & Status Banner */}
+                      {pushState.isSupported && (
+                        <div className="border-b border-app-border">
+                          {pushState.permission === 'granted' ? (
+                            <div className="px-4 py-2 bg-emerald-500/10 flex items-center justify-between text-[11px] text-emerald-700 dark:text-emerald-400">
+                              <div className="flex items-center gap-1.5">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                <span className="font-semibold">Browser Push Active</span>
+                              </div>
+                              <span className="text-[10px] font-mono opacity-80">FCM Registered</span>
+                            </div>
+                          ) : pushState.permission === 'denied' ? (
+                            <div className="px-4 py-2 bg-amber-500/10 text-[11px] text-amber-800 dark:text-amber-300">
+                              <div className="flex items-start gap-1.5">
+                                <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                <div>
+                                  <span className="font-semibold block leading-tight">Push Blocked in Browser</span>
+                                  <span className="text-[10px] text-app-text-secondary">Please allow notifications in your browser address bar.</span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : pushState.permission === 'not_configured' ? (
+                            <div className="px-4 py-1.5 bg-app-muted/60 flex items-center justify-between text-[10px] text-app-text-secondary">
+                              <span>Web Push: Configuration Pending</span>
+                              <span className="font-mono text-[9px] uppercase">VAPID Needed</span>
+                            </div>
+                          ) : (
+                            <div className="px-4 py-2.5 bg-brand-light/40 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <BellRing className="w-3.5 h-3.5 text-brand shrink-0" />
+                                <span className="text-[11px] text-app-text font-medium">Enable Browser Push Alerts</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleEnablePush}
+                                disabled={pushState.loading}
+                                className="px-2.5 py-1 text-[10px] font-semibold text-white bg-brand hover:bg-brand-dark rounded transition-colors disabled:opacity-50"
+                              >
+                                {pushState.loading ? 'Enabling...' : 'Enable'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="max-h-80 overflow-y-auto divide-y divide-app-border">
                         {userNotifications.length === 0 ? (

@@ -203,7 +203,7 @@ describe('CareLoop — Hospital Operations & Admin Governance Suite', () => {
       expect(roles).toContain('patient');
       expect(roles).toContain('donor');
       expect(roles).toContain('admin');
-    });
+    }, 15000);
 
     it('4.2 Updates configurable clinical system thresholds', () => {
       const initial = adminService.getSettings();

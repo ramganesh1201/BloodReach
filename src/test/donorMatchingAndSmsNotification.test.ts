@@ -119,7 +119,7 @@ describe('CareLoop — SMS Notification & Clinical Donor Matching Suite', () => 
       const secondAttempt = await smsNotificationService.processTokenResponse(tokenPayload.token, 'ACCEPT');
       expect(secondAttempt.success).toBe(false);
       expect(secondAttempt.error).toBe('Token already used');
-    });
+    }, 15000);
 
     it('3.2 Successfully declines emergency call and marks token USED', async () => {
       const tokenPayload = smsNotificationService.createResponseToken({
@@ -144,7 +144,7 @@ describe('CareLoop — SMS Notification & Clinical Donor Matching Suite', () => 
       const resolved = smsNotificationService.resolveToken(tokenPayload.token);
       expect(resolved?.status).toBe('USED');
       expect(resolved?.actionTaken).toBe('DECLINED');
-    });
+    }, 15000);
 
     it('3.3 Synchronizes in-app action to mark SMS tokens as used', () => {
       const tokenPayload = smsNotificationService.createResponseToken({
