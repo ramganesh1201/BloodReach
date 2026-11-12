@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useBloodStore } from '../../store/useBloodStore';
 import { BloodGroup, BloodComponent } from '../../types';
 import { DonorOnboardingInput, validateDonorOnboardingInput } from '../../services/donorResponseService';
@@ -28,6 +29,7 @@ export const DonorOnboardingModal: React.FC<DonorOnboardingModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const navigate = useNavigate();
   const { currentUser, onboardAsDonor, donors } = useBloodStore();
 
   const [fullName, setFullName] = useState(currentUser?.fullName || '');
@@ -221,13 +223,26 @@ export const DonorOnboardingModal: React.FC<DonorOnboardingModalProps> = ({
                   <span className="font-medium text-warning">Pending Pathologist Verification</span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full sm:w-auto bg-brand hover:bg-brand-dark text-white font-bold py-2.5 px-6 rounded-lg text-xs transition-colors"
-              >
-                Return to Workspace
-              </button>
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    navigate('/donor');
+                  }}
+                  className="w-full sm:w-auto bg-brand hover:bg-brand-dark text-white font-bold py-2.5 px-6 rounded-lg text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <Heart className="w-4 h-4 fill-current" />
+                  <span>Go to Donor Workspace</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full sm:w-auto bg-app-surface hover:bg-app-muted border border-app-border text-app-text font-medium py-2.5 px-5 rounded-lg text-xs transition-colors"
+                >
+                  <span>Stay on Current Page</span>
+                </button>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">

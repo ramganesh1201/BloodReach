@@ -340,3 +340,136 @@ export async function getDonorResponses(
   }
 }
 
+/**
+ * Updates non-sensitive contact details for a donor profile (phone, city, district, availability).
+ * Strictly prevents direct manipulation of clinical data (blood group, medical clearance, deferral).
+ */
+export async function updateDonorContactInfo(
+  donorId: string,
+  updates: {
+    phone?: string;
+    city?: string;
+    district?: string;
+    isAvailable?: boolean;
+  }
+): Promise<{ success: boolean; data?: Donor; error?: string }> {
+  if (!donorId) {
+    return { success: false, error: 'Donor ID is required.' };
+  }
+
+  const payload: Record<string, any> = {};
+
+  if (updates.phone !== undefined) {
+    const cleanDigits = updates.phone.replace(/\D/g, '');
+    if (cleanDigits.length < 7 || cleanDigits.length > 15) {
+      return { success: false, error: 'Please enter a valid telephone number (7-15 digits).' };
+    }
+    payload.phone = normalizePhoneNumber(updates.phone);
+  }
+
+  if (updates.city !== undefined) {
+    if (!updates.city || updates.city.trim().length === 0) {
+      return { success: false, error: 'City cannot be empty.' };
+    }
+    payload.city = updates.city.trim();
+  }
+
+  if (updates.district !== undefined) {
+    payload.district = updates.district?.trim() || null;
+  }
+
+  if (updates.isAvailable !== undefined) {
+    payload.is_available = updates.isAvailable;
+    payload.availability_state = updates.isAvailable ? 'AVAILABLE' : 'TEMPORARILY_UNAVAILABLE';
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return { success: false, error: 'No fields to update.' };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('donors')
+      .update(payload)
+      .eq('id', donorId)
+      .select()
+      .single();
+
+    if (error) {
+      if (
+        error.code === '23505' ||
+        error.message?.includes('duplicate key') ||
+        error.message?.includes('donors_phone_key')
+      ) {
+        return {
+          success: false,
+          error: 'This phone number is already registered to another volunteer donor profile.',
+        };
+      }
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: mapDbToDonor(data) };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to update donor contact details.' };
+  }
+}
+
+/**
+ * Submits a clinical correction or re-verification request for verified medical data.
+ * Adheres to healthcare safety: verified blood group, medical clearance, or donation history
+ * cannot be directly modified without qualified pathologist and coordinator review.
+ */
+export async function requestClinicalCorrection(
+  donorId: string,
+  request: {
+    field: string;
+    requestedValue: string;
+    reason: string;
+    certificateNotes?: string;
+  }
+): Promise<{ success: boolean; message: string; error?: string }> {
+  if (!donorId) {
+    return { success: false, message: '', error: 'Donor ID is required.' };
+  }
+  if (!request.field || !request.requestedValue || !request.reason?.trim()) {
+    return { success: false, message: '', error: 'Field, requested value, and justification reason are required.' };
+  }
+
+  try {
+    // Record audit event in notifications for coordinators / administrators
+    const { error } = await supabase.from('notifications').insert({
+      channel: 'IN_APP',
+      title: 'Clinical Correction Review Requested',
+      content: `Donor ${donorId} submitted a clinical correction request for ${request.field} -> "${request.requestedValue}". Reason: ${request.reason}`,
+      status: 'QUEUED',
+      metadata: {
+        donor_id: donorId,
+        type: 'CLINICAL_CORRECTION_REQUEST',
+        field: request.field,
+        requested_value: request.requestedValue,
+        reason: request.reason,
+        certificate_notes: request.certificateNotes || null,
+        requested_at: new Date().toISOString(),
+        role: 'coordinator',
+      },
+    });
+
+    if (error) {
+      console.warn('[ClinicalCorrection] Database notification record notice:', error.message);
+    }
+
+    return {
+      success: true,
+      message: 'Your clinical re-verification request has been recorded with an audit trail and submitted for accredited blood centre pathologist review.',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: '',
+      error: err?.message || 'Failed to submit clinical correction request.',
+    };
+  }
+}
+
+

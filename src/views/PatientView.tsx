@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 
 export const PatientView: React.FC = () => {
-  const { requests, cancelEmergencyRequest, currentUser, isOffline } = useBloodStore();
+  const { requests, cancelEmergencyRequest, currentUser, isOffline, isRegisteredDonor, userDonorProfile } = useBloodStore();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
   const [cancelModalId, setCancelModalId] = useState<string | null>(null);
@@ -188,14 +188,26 @@ export const PatientView: React.FC = () => {
               <PlusCircle className="w-4 h-4 shrink-0" />
               <span>Create Blood Request</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setIsOnboardingOpen(true)}
-              className="bg-brand-light hover:bg-brand/20 text-brand font-semibold text-xs sm:text-sm py-2 px-3.5 rounded-lg transition-colors border border-brand/20 flex items-center gap-2"
-            >
-              <Heart className="w-4 h-4 text-brand shrink-0 fill-current" />
-              <span>Register as Donor</span>
-            </button>
+            {isRegisteredDonor ? (
+              <button
+                type="button"
+                onClick={() => navigate('/donor')}
+                className="bg-brand-light hover:bg-brand/20 text-brand font-semibold text-xs sm:text-sm py-2 px-3.5 rounded-lg transition-colors border border-brand/20 flex items-center gap-2"
+                title="Access your registered donor workspace"
+              >
+                <Heart className="w-4 h-4 text-brand shrink-0 fill-current" />
+                <span>Donor Workspace ({userDonorProfile?.bloodGroup})</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsOnboardingOpen(true)}
+                className="bg-brand-light hover:bg-brand/20 text-brand font-semibold text-xs sm:text-sm py-2 px-3.5 rounded-lg transition-colors border border-brand/20 flex items-center gap-2"
+              >
+                <Heart className="w-4 h-4 text-brand shrink-0" />
+                <span>Become a Donor</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => navigate('/communication')}

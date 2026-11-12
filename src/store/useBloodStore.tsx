@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   EmergencyRequest,
   EmergencyEvent,
@@ -579,6 +579,10 @@ interface BloodStoreContextType {
   toggleDonorAvailability: (donorId: string) => void;
   setDonorAvailabilityState: (donorId: string, state: DonorAvailabilityState) => void;
   onboardAsDonor: (input: donorResponseService.DonorOnboardingInput) => Promise<{ success: boolean; data?: Donor; error?: string }>;
+  userDonorProfile: Donor | null;
+  isRegisteredDonor: boolean;
+  updateDonorContactInfo: (donorId: string, updates: { phone?: string; city?: string; district?: string; isAvailable?: boolean }) => Promise<{ success: boolean; data?: Donor; error?: string }>;
+  requestClinicalCorrection: (donorId: string, request: { field: string; requestedValue: string; reason: string; certificateNotes?: string }) => Promise<{ success: boolean; message: string; error?: string }>;
   
   // Blood Bank Operations
   updateInventory: (centreId: string, bloodGroup: BloodGroup, component: BloodComponent, newUnits: number) => Promise<void>;
@@ -737,6 +741,20 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [backendError, setBackendError] = useState<string | null>(null);
+
+  // One Account, Donor Capabilities
+  const userDonorProfile = useMemo<Donor | null>(() => {
+    if (!currentUser) return null;
+    return (
+      donors.find(
+        (d) =>
+          (currentUser.id && d.profileId === currentUser.id) ||
+          (currentUser.email && d.email?.toLowerCase() === currentUser.email?.toLowerCase())
+      ) || null
+    );
+  }, [donors, currentUser]);
+
+  const isRegisteredDonor = Boolean(userDonorProfile);
 
   // Persistence / Mode indicator: explicit demo preview vs live database
   const dataSource: 'database' | 'demo' = demoExperience ? 'demo' : 'database';
@@ -2235,6 +2253,11 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setDonors((prev) => [newDonor, ...prev.filter((d) => d.profileId !== currentUser.id)]);
     }
 
+    // If currentUser bloodGroup was missing, update it
+    if (input.bloodGroup && !currentUser.bloodGroup) {
+      setCurrentUser((prev) => (prev ? { ...prev, bloodGroup: input.bloodGroup } : null));
+    }
+
     // Recipient-specific notification for the applicant
     notificationService.sendInAppNotification({
       userId: currentUser.id,
@@ -2249,7 +2272,46 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       metadata: { role: 'coordinator' },
     });
 
-    return { success: true };
+    const registeredDonor = donors.find((d) => d.profileId === currentUser.id);
+    return { success: true, data: registeredDonor };
+  };
+
+  const updateDonorContactInfo = async (
+    donorId: string,
+    updates: { phone?: string; city?: string; district?: string; isAvailable?: boolean }
+  ): Promise<{ success: boolean; data?: Donor; error?: string }> => {
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      const res = await donorResponseService.updateDonorContactInfo(donorId, updates);
+      if (res.success && res.data) {
+        setDonors((prev) => prev.map((d) => (d.id === donorId ? res.data! : d)));
+      }
+      return res;
+    } else {
+      setDonors((prev) =>
+        prev.map((d) => {
+          if (d.id === donorId) {
+            return {
+              ...d,
+              phone: updates.phone || d.phone,
+              city: updates.city || d.city,
+              district: updates.district !== undefined ? updates.district : d.district,
+              isAvailable: updates.isAvailable !== undefined ? updates.isAvailable : d.isAvailable,
+              availabilityState: updates.isAvailable !== undefined ? (updates.isAvailable ? 'AVAILABLE' : 'TEMPORARILY_UNAVAILABLE') : d.availabilityState,
+            };
+          }
+          return d;
+        })
+      );
+      const updated = donors.find((d) => d.id === donorId);
+      return { success: true, data: updated };
+    }
+  };
+
+  const requestClinicalCorrection = async (
+    donorId: string,
+    request: { field: string; requestedValue: string; reason: string; certificateNotes?: string }
+  ): Promise<{ success: boolean; message: string; error?: string }> => {
+    return donorResponseService.requestClinicalCorrection(donorId, request);
   };
 
   const sendMessage = async (
@@ -3292,6 +3354,10 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         toggleDonorAvailability,
         setDonorAvailabilityState,
         onboardAsDonor,
+        userDonorProfile,
+        isRegisteredDonor,
+        updateDonorContactInfo,
+        requestClinicalCorrection,
         updateInventory,
         verifyAndFulfillRequest,
         sendMessage,

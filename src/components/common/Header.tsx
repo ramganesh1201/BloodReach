@@ -58,7 +58,9 @@ export const Header: React.FC = () => {
     exitDemoMode,
     signOut,
     acknowledgeAllNotifications,
-    acknowledgeNotification
+    acknowledgeNotification,
+    isRegisteredDonor,
+    userDonorProfile,
   } = useBloodStore();
 
   const location = useLocation();
@@ -84,9 +86,14 @@ export const Header: React.FC = () => {
 
   const unreadCount = userNotifications.filter((n) => n.status !== 'ACKNOWLEDGED').length;
 
-  const desktopNavItems = (authenticatedRole || demoExperience)
+  const baseNavItems = (authenticatedRole || demoExperience)
     ? (DESKTOP_NAV_BY_ROLE[currentRole] || DESKTOP_NAV_BY_ROLE['patient'])
     : PUBLIC_DESKTOP_NAV;
+
+  const desktopNavItems = [...baseNavItems];
+  if (isRegisteredDonor && currentRole === 'patient' && !desktopNavItems.some((i) => i.path === '/donor')) {
+    desktopNavItems.push({ path: '/donor', label: 'Donor Hub', icon: Heart });
+  }
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -397,26 +404,49 @@ export const Header: React.FC = () => {
                       </div>
 
                       <div className="py-1">
-                        <Link
-                          to={currentRole === 'patient' ? '/patient' : currentRole === 'donor' ? '/donor' : currentRole === 'blood_centre' ? '/blood-centre' : currentRole === 'coordinator' ? '/coordinator' : '/admin'}
-                          onClick={() => setProfileDropdownOpen(false)}
-                          className="px-3.5 py-2 hover:bg-app-muted flex items-center gap-2 text-app-text"
-                        >
-                          <User className="w-3.5 h-3.5 text-app-text-secondary" />
-                          <span>My Workspace</span>
-                        </Link>
-                        {currentRole === 'patient' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setProfileDropdownOpen(false);
-                              setDonorOnboardingOpen(true);
-                            }}
-                            className="w-full text-left px-3.5 py-2 hover:bg-brand-light/40 flex items-center gap-2 text-brand font-medium"
-                          >
-                            <Heart className="w-3.5 h-3.5 text-brand" />
-                            <span>Become a Volunteer Donor</span>
-                          </button>
+                        {isRegisteredDonor ? (
+                          <>
+                            <Link
+                              to="/patient"
+                              onClick={() => setProfileDropdownOpen(false)}
+                              className="px-3.5 py-2 hover:bg-app-muted flex items-center gap-2 text-app-text"
+                            >
+                              <User className="w-3.5 h-3.5 text-app-text-secondary" />
+                              <span>Patient Workspace</span>
+                            </Link>
+                            <Link
+                              to="/donor"
+                              onClick={() => setProfileDropdownOpen(false)}
+                              className="px-3.5 py-2 hover:bg-app-muted flex items-center gap-2 text-brand font-medium"
+                            >
+                              <Heart className="w-3.5 h-3.5 text-brand fill-current" />
+                              <span>Donor Workspace ({userDonorProfile?.bloodGroup})</span>
+                            </Link>
+                          </>
+                        ) : (
+                          <>
+                            <Link
+                              to={currentRole === 'patient' ? '/patient' : currentRole === 'donor' ? '/donor' : currentRole === 'blood_centre' ? '/blood-centre' : currentRole === 'coordinator' ? '/coordinator' : '/admin'}
+                              onClick={() => setProfileDropdownOpen(false)}
+                              className="px-3.5 py-2 hover:bg-app-muted flex items-center gap-2 text-app-text"
+                            >
+                              <User className="w-3.5 h-3.5 text-app-text-secondary" />
+                              <span>My Workspace</span>
+                            </Link>
+                            {currentRole === 'patient' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setProfileDropdownOpen(false);
+                                  setDonorOnboardingOpen(true);
+                                }}
+                                className="w-full text-left px-3.5 py-2 hover:bg-brand-light/40 flex items-center gap-2 text-brand font-medium"
+                              >
+                                <Heart className="w-3.5 h-3.5 text-brand" />
+                                <span>Become a Volunteer Donor</span>
+                              </button>
+                            )}
+                          </>
                         )}
                         <Link
                           to="/communication"

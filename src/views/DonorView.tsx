@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { AvailabilityToggle } from '../components/donor/AvailabilityToggle';
@@ -39,6 +39,13 @@ import {
   ArrowRight,
   Lock,
   Sparkles,
+  Edit3,
+  Save,
+  X,
+  FileText,
+  AlertTriangle,
+  RefreshCw,
+  Phone,
 } from 'lucide-react';
 
 export type DonorTab =
@@ -62,6 +69,10 @@ export const DonorView: React.FC = () => {
     currentUser,
     demoExperience,
     isOffline,
+    userDonorProfile,
+    isRegisteredDonor,
+    updateDonorContactInfo,
+    requestClinicalCorrection,
   } = useBloodStore();
 
   const navigate = useNavigate();
@@ -74,13 +85,38 @@ export const DonorView: React.FC = () => {
   const [selfDeferralReason, setSelfDeferralReason] = useState<string>('Recent Dental / Travel');
   const [selfDeferralSuccess, setSelfDeferralSuccess] = useState<string | null>(null);
 
-  // Active donor session - resolve strictly to authenticated user's linked donor record
+  // Active donor session - prioritize userDonorProfile if linked, then match by profileId or email
   const activeDonor =
+    userDonorProfile ||
     donors.find(
       (d) =>
         (currentUser?.id && d.profileId === currentUser.id) ||
         (currentUser?.email && d.email === currentUser.email)
     ) || (demoExperience ? donors[0] : null);
+
+  // Contact Info Editing State (Phase 3)
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [contactPhone, setContactPhone] = useState(activeDonor?.phone || '');
+  const [contactCity, setContactCity] = useState(activeDonor?.city || '');
+  const [contactDistrict, setContactDistrict] = useState(activeDonor?.district || '');
+  const [contactStatus, setContactStatus] = useState<{ type: 'idle' | 'saving' | 'success' | 'error'; message?: string }>({ type: 'idle' });
+
+  // Clinical Correction Request State (Phase 3)
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+  const [correctionField, setCorrectionField] = useState('bloodGroup');
+  const [correctionRequestedValue, setCorrectionRequestedValue] = useState('');
+  const [correctionReason, setCorrectionReason] = useState('');
+  const [correctionCertificateNotes, setCorrectionCertificateNotes] = useState('');
+  const [correctionStatus, setCorrectionStatus] = useState<{ type: 'idle' | 'submitting' | 'success' | 'error'; message?: string }>({ type: 'idle' });
+
+  // Keep contact inputs synchronized if donor updates
+  useEffect(() => {
+    if (activeDonor) {
+      setContactPhone(activeDonor.phone || '');
+      setContactCity(activeDonor.city || '');
+      setContactDistrict(activeDonor.district || '');
+    }
+  }, [activeDonor?.phone, activeDonor?.city, activeDonor?.district]);
 
   // Unlinked or unonboarded user view
   if (!activeDonor) {
@@ -191,15 +227,123 @@ export const DonorView: React.FC = () => {
     setSelfDeferralSuccess(`Self-deferral active for ${selfDeferralDays} days until ${untilDate} (${selfDeferralReason}).`);
   };
 
+  // Phase 3: Contact Info update handler
+  const handleSaveContactInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setContactStatus({ type: 'saving' });
+
+    const cleanPhone = contactPhone.trim();
+    if (!cleanPhone || cleanPhone.replace(/\D/g, '').length < 10) {
+      setContactStatus({
+        type: 'error',
+        message: 'Please provide a valid phone number with at least 10 digits for emergency contact.',
+      });
+      return;
+    }
+
+    try {
+      const res = await updateDonorContactInfo(activeDonor.id, {
+        phone: cleanPhone,
+        city: contactCity.trim(),
+        district: contactDistrict.trim(),
+      });
+
+      if (res.success) {
+        setContactStatus({
+          type: 'success',
+          message: 'Contact details successfully updated in clinical donor registry.',
+        });
+        setIsEditingContact(false);
+      } else {
+        setContactStatus({
+          type: 'error',
+          message: res.error || 'Failed to update contact details.',
+        });
+      }
+    } catch (err: any) {
+      setContactStatus({
+        type: 'error',
+        message: err?.message || 'Unexpected error updating contact details.',
+      });
+    }
+  };
+
+  // Phase 3: Clinical correction request handler
+  const handleSubmitClinicalCorrection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!correctionRequestedValue.trim() || !correctionReason.trim()) {
+      setCorrectionStatus({
+        type: 'error',
+        message: 'Please specify both the requested corrected value and the clinical justification.',
+      });
+      return;
+    }
+
+    setCorrectionStatus({ type: 'submitting' });
+    try {
+      const res = await requestClinicalCorrection(activeDonor.id, {
+        field: correctionField,
+        requestedValue: correctionRequestedValue.trim(),
+        reason: correctionReason.trim(),
+        certificateNotes: correctionCertificateNotes.trim() || undefined,
+      });
+
+      if (res.success) {
+        setCorrectionStatus({
+          type: 'success',
+          message: res.message || 'Clinical correction request submitted for blood centre pathologist review.',
+        });
+        setTimeout(() => {
+          setIsCorrectionModalOpen(false);
+          setCorrectionStatus({ type: 'idle' });
+          setCorrectionRequestedValue('');
+          setCorrectionReason('');
+          setCorrectionCertificateNotes('');
+        }, 1800);
+      } else {
+        setCorrectionStatus({
+          type: 'error',
+          message: res.error || 'Failed to submit clinical correction request.',
+        });
+      }
+    } catch (err: any) {
+      setCorrectionStatus({
+        type: 'error',
+        message: err?.message || 'Unexpected error submitting correction request.',
+      });
+    }
+  };
+
   // Clinical Eligibility evaluation
   const eligibility = evaluateDonorEligibility(activeDonor, 'Whole Blood');
   const isUndetermined = eligibility.reason === 'Unable to determine — blood centre assessment required';
 
-  // Filter requests matching this donor clinically
+  // Phase 4: Filter requests strictly matching this donor clinically and geographically
   const activeRequests = requests.filter((r) => {
-    if (r.status === 'FULFILLED' || r.status === 'CANCELLED' || r.status === 'EXPIRED') return false;
+    // 1. Exclude terminal states
+    if (['FULFILLED', 'CANCELLED', 'EXPIRED'].includes(r.status)) return false;
+
+    // 2. Exclude requests created by the donor themselves
+    if (currentUser?.id && r.createdBy === currentUser.id) return false;
+    if (activeDonor?.profileId && r.createdBy === activeDonor.profileId) return false;
+
+    // 3. Clinical compatibility (ABO / Rh / Component)
     const comp = isClinicallyCompatible(r.bloodGroup, activeDonor.bloodGroup, r.component);
-    return comp.compatible;
+    if (!comp.compatible) return false;
+
+    // 4. Locality / Radius check (if city or district specified)
+    if (r.city && activeDonor.city) {
+      const cityMatch = r.city.trim().toLowerCase() === activeDonor.city.trim().toLowerCase();
+      const districtMatch = r.district && activeDonor.district && r.district.trim().toLowerCase() === activeDonor.district.trim().toLowerCase();
+      const distanceMatch =
+        ((r as any).distanceKm !== undefined && (r as any).distanceKm <= 50) ||
+        (activeDonor.approxDistanceKm !== undefined && activeDonor.approxDistanceKm <= 50);
+      if (!cityMatch && !districtMatch && !distanceMatch) {
+        return false;
+      }
+    }
+
+    return true;
   });
 
   // Active commitments for this donor
@@ -210,15 +354,32 @@ export const DonorView: React.FC = () => {
   // Active conversations for this donor
   const myConversations = conversations.filter((c) => c.donorId === activeDonor.id);
 
-  // Notifications for this donor
+  // Phase 4: Scoped and deduplicated notifications strictly for this donor
   const allNotifs = notificationService.getNotificationLogs();
-  const myNotifications = allNotifs.filter(
-    (n) => !n.userId || n.userId === activeDonor.id || n.userId === activeDonor.profileId
-  );
+  const myNotifications = allNotifs.filter((n) => {
+    if (!n.userId) return true; // System broadcast
+    return (
+      n.userId === activeDonor.id ||
+      n.userId === activeDonor.profileId ||
+      (currentUser?.id && n.userId === currentUser.id) ||
+      (n.metadata?.donor_id && n.metadata.donor_id === activeDonor.id) ||
+      (n.metadata?.recipient_user_id && n.metadata.recipient_user_id === currentUser?.id)
+    );
+  });
+
+  // Deduplicate notifications by stable key
+  const seenNotifKeys = new Set<string>();
+  const deduplicatedNotifications = myNotifications.filter((n) => {
+    const key = n.id || `${n.requestId || 'gen'}-${n.channel}-${n.title}-${n.timestamp}`;
+    if (seenNotifKeys.has(key)) return false;
+    seenNotifKeys.add(key);
+    return true;
+  });
+
   const filteredNotifications =
     notificationFilter === 'UNREAD'
-      ? myNotifications.filter((n) => n.status !== 'ACKNOWLEDGED')
-      : myNotifications;
+      ? deduplicatedNotifications.filter((n) => n.status !== 'ACKNOWLEDGED')
+      : deduplicatedNotifications;
 
   const donorAvailabilityState: DonorAvailabilityState =
     activeDonor.availabilityState || (activeDonor.isAvailable ? 'AVAILABLE' : 'TEMPORARILY_UNAVAILABLE');
@@ -307,7 +468,7 @@ export const DonorView: React.FC = () => {
         {[
           { id: 'overview', label: 'Overview', icon: Heart },
           { id: 'matches', label: `Matching Requests (${activeRequests.length})`, icon: Bell },
-          { id: 'notifications', label: `Notifications (${myNotifications.length})`, icon: Activity },
+          { id: 'notifications', label: `Notifications (${deduplicatedNotifications.length})`, icon: Activity },
           { id: 'history', label: 'My Donations', icon: Droplet },
           { id: 'communication', label: `Communication (${myConversations.length})`, icon: MessageSquare },
           { id: 'availability', label: 'Availability & Intervals', icon: Sliders },
@@ -733,47 +894,444 @@ export const DonorView: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 7: CLINICAL PROFILE & SPECS */}
+      {/* TAB 7: CLINICAL PROFILE & SPECS (PHASE 3) */}
       {activeTab === 'profile' && (
-        <div className="bg-app-surface border border-app-border rounded-xl shadow-subtle p-5 sm:p-6 space-y-5 animate-fade-in text-xs">
-          <div className="border-b border-app-border pb-3">
-            <h3 className="text-sm font-bold text-app-text font-display">
-              Clinical Donor Specifications
-            </h3>
-            <p className="text-[11px] text-app-text-secondary mt-0.5">
-              Verified clinical metrics and contact parameters.
-            </p>
+        <div className="space-y-6 animate-fade-in text-xs">
+          {/* Card 1: Contact Information (Editable with inline Edit/Save/Cancel) */}
+          <div className="bg-app-surface border border-app-border rounded-xl shadow-subtle p-5 sm:p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-app-border gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-brand" />
+                  <h3 className="text-sm font-bold text-app-text font-display">
+                    Contact & Geographical Information
+                  </h3>
+                </div>
+                <p className="text-[11px] text-app-text-secondary mt-0.5">
+                  Used exclusively by hospital coordinators for emergency dispatch routing.
+                </p>
+              </div>
+
+              {!isEditingContact ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingContact(true);
+                    setContactStatus({ type: 'idle' });
+                  }}
+                  className="self-start sm:self-auto px-3 py-1.5 rounded-lg border border-app-border bg-app-surface hover:bg-app-muted text-app-text font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-brand" />
+                  <span>Edit Contact Details</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingContact(false);
+                      setContactPhone(activeDonor.phone || '');
+                      setContactCity(activeDonor.city || '');
+                      setContactDistrict(activeDonor.district || '');
+                      setContactStatus({ type: 'idle' });
+                    }}
+                    disabled={contactStatus.type === 'saving'}
+                    className="px-3 py-1.5 rounded-lg border border-app-border bg-app-muted text-app-text font-semibold text-xs flex items-center gap-1 hover:bg-app-muted/80 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Cancel</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveContactInfo}
+                    disabled={contactStatus.type === 'saving'}
+                    className="px-3.5 py-1.5 rounded-lg bg-brand hover:bg-brand-dark text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+                  >
+                    {contactStatus.type === 'saving' ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5" />
+                    )}
+                    <span>{contactStatus.type === 'saving' ? 'Saving...' : 'Save Changes'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {contactStatus.type === 'error' && (
+              <div className="p-3 rounded-lg bg-red-50 text-emergency border border-red-200 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{contactStatus.message}</span>
+              </div>
+            )}
+
+            {contactStatus.type === 'success' && (
+              <div className="p-3 rounded-lg bg-success-light text-success border border-success-border text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{contactStatus.message}</span>
+              </div>
+            )}
+
+            {isEditingContact ? (
+              <form onSubmit={handleSaveContactInfo} className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                <div>
+                  <label className="block text-[11px] font-bold text-app-text-secondary uppercase mb-1">
+                    Contact Phone Number <span className="text-emergency">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    required
+                    className="w-full p-2.5 rounded-lg border border-app-border bg-app-surface text-app-text font-mono text-xs focus:ring-2 focus:ring-brand focus:outline-none"
+                  />
+                  <span className="text-[10px] text-app-text-secondary mt-1 block">Masked from recipients</span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-app-text-secondary uppercase mb-1">
+                    Primary City <span className="text-emergency">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={contactCity}
+                    onChange={(e) => setContactCity(e.target.value)}
+                    placeholder="e.g. Hyderabad"
+                    required
+                    className="w-full p-2.5 rounded-lg border border-app-border bg-app-surface text-app-text text-xs focus:ring-2 focus:ring-brand focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-app-text-secondary uppercase mb-1">
+                    Administrative District
+                  </label>
+                  <input
+                    type="text"
+                    value={contactDistrict}
+                    onChange={(e) => setContactDistrict(e.target.value)}
+                    placeholder="e.g. Hyderabad District"
+                    className="w-full p-2.5 rounded-lg border border-app-border bg-app-surface text-app-text text-xs focus:ring-2 focus:ring-brand focus:outline-none"
+                  />
+                </div>
+              </form>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-app-text-secondary">Emergency Phone</span>
+                  <p className="text-sm font-bold text-app-text font-mono">{activeDonor.phone || 'Not recorded'}</p>
+                </div>
+                <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-app-text-secondary">Primary City</span>
+                  <p className="text-sm font-bold text-app-text">{activeDonor.city || 'Not recorded'}</p>
+                </div>
+                <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-app-text-secondary">District</span>
+                  <p className="text-sm font-bold text-app-text">{activeDonor.district || activeDonor.city || 'Not recorded'}</p>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1">
-              <span className="text-[10px] uppercase font-bold text-app-text-secondary">Blood Group</span>
-              <p className="text-xl font-black text-brand font-display">{activeDonor.bloodGroup}</p>
+          {/* Card 2: Verified Clinical Specifications (LOCKED) */}
+          <div className="bg-app-surface border border-app-border rounded-xl shadow-subtle p-5 sm:p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-app-border gap-2">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-success" />
+                <div>
+                  <h3 className="text-sm font-bold text-app-text font-display flex items-center gap-2">
+                    <span>Locked Clinical Specifications</span>
+                    <span className="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                      <Lock className="w-3 h-3" /> Pathology-Locked
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-app-text-secondary mt-0.5">
+                    Critical clinical parameters are locked to prevent accidental or fraudulent mismatch.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCorrectionModalOpen(true);
+                  setCorrectionStatus({ type: 'idle' });
+                }}
+                className="self-start sm:self-auto px-3.5 py-1.5 rounded-lg border border-brand/40 bg-brand/5 hover:bg-brand/10 text-brand font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Request Clinical Correction</span>
+              </button>
             </div>
 
-            <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1">
-              <span className="text-[10px] uppercase font-bold text-app-text-secondary">Body Weight</span>
-              <p className="text-xl font-bold text-app-text font-mono">
-                {activeDonor.weightKg ? `${activeDonor.weightKg} kg` : '≥45 kg (Verified)'}
-              </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1 relative">
+                <span className="text-[10px] uppercase font-bold text-app-text-secondary flex items-center justify-between">
+                  <span>Blood Group</span>
+                  <Lock className="w-3 h-3 text-app-text-secondary" />
+                </span>
+                <p className="text-2xl font-black text-brand font-display">{activeDonor.bloodGroup}</p>
+                <span className="text-[10px] text-app-text-secondary block">ABO / Rh Confirmed</span>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1 relative">
+                <span className="text-[10px] uppercase font-bold text-app-text-secondary flex items-center justify-between">
+                  <span>Body Weight</span>
+                  <Lock className="w-3 h-3 text-app-text-secondary" />
+                </span>
+                <p className="text-xl font-bold text-app-text font-mono">
+                  {activeDonor.weightKg ? `${activeDonor.weightKg} kg` : '≥ 45 kg (Screened)'}
+                </p>
+                <span className="text-[10px] text-app-text-secondary block">Min NBTC requirement: 45 kg</span>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1 relative">
+                <span className="text-[10px] uppercase font-bold text-app-text-secondary flex items-center justify-between">
+                  <span>Biological Sex</span>
+                  <Lock className="w-3 h-3 text-app-text-secondary" />
+                </span>
+                <p className="text-sm font-bold text-app-text">
+                  {activeDonor.sex || activeDonor.gender || 'Assessment Required'}
+                </p>
+                <span className="text-[10px] text-app-text-secondary block">Governs 90d/120d safe interval</span>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1 relative">
+                <span className="text-[10px] uppercase font-bold text-app-text-secondary flex items-center justify-between">
+                  <span>Clinical Clearance</span>
+                  <CheckCircle2 className="w-3 h-3 text-success" />
+                </span>
+                <p className="text-sm font-bold text-success">CLINICALLY_VERIFIED</p>
+                <span className="text-[10px] text-app-text-secondary block">Donor Registry Active</span>
+              </div>
             </div>
 
-            <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1">
-              <span className="text-[10px] uppercase font-bold text-app-text-secondary">Primary City</span>
-              <p className="text-sm font-bold text-app-text">{activeDonor.city}</p>
-            </div>
-
-            <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1">
-              <span className="text-[10px] uppercase font-bold text-app-text-secondary">On-Site Hemoglobin Protocol</span>
-              <p className="text-sm font-semibold text-success">Screened ≥ 12.5 g/dL upon hospital arrival</p>
+            <div className="p-3.5 rounded-xl bg-info-light border border-info-border text-info text-[11px] flex items-start gap-2.5">
+              <Lock className="w-4 h-4 shrink-0 mt-0.5 text-info" />
+              <div>
+                <strong className="block text-app-text font-bold">Healthcare Integrity Safeguard</strong>
+                <p className="leading-relaxed text-app-text-secondary">
+                  To protect recipient lives, medical specifications cannot be directly overwritten from the web browser. Submitting a correction request sends an audit notification to blood centre pathologists and administrative coordinators.
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-info-light border border-info-border text-info text-[11px] flex items-start gap-2">
-            <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>
-              <strong>Healthcare Data Integrity:</strong> To modify your verified blood group or clinical medical records, a certificate from an accredited blood centre pathologist is required.
-            </span>
+          {/* Card 3: System-Managed Eligibility & NBTC 2023 Guidelines */}
+          <div className="bg-app-surface border border-app-border rounded-xl shadow-subtle p-5 sm:p-6 space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-app-border">
+              <Award className="w-4 h-4 text-warning-dark" />
+              <div>
+                <h3 className="text-sm font-bold text-app-text font-display">
+                  System-Managed Clinical Eligibility (NBTC 2023 Standards)
+                </h3>
+                <p className="text-[11px] text-app-text-secondary mt-0.5">
+                  Automated interval gating and mandatory hospital arrival protocols.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-app-text-secondary">Interval Clearance</span>
+                <p className={`text-base font-bold ${eligibility.isEligible ? 'text-success' : 'text-warning-dark'}`}>
+                  {isUndetermined
+                    ? 'Assessment Required'
+                    : eligibility.isEligible
+                    ? 'Interval Cleared'
+                    : `${eligibility.daysRemaining || 0} Days Remaining`}
+                </p>
+                <p className="text-[10px] text-app-text-secondary">
+                  {eligibility.reason || 'Calculated from last recorded donation'}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-app-text-secondary">Hemoglobin Requirement</span>
+                <p className="text-base font-bold text-app-text font-mono">≥ 12.5 g/dL</p>
+                <p className="text-[10px] text-app-text-secondary">
+                  Mandatory rapid copper sulfate / photometric test on hospital arrival
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-app-text-secondary">Vital Signs Gating</span>
+                <p className="text-base font-bold text-app-text font-mono">BP & Pulse Verified</p>
+                <p className="text-[10px] text-app-text-secondary">
+                  Systolic 100–140 mmHg, diastolic 60–90 mmHg, pulse 60–100 bpm
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg border border-app-border bg-app-muted/30 text-[11px] text-app-text-secondary space-y-1.5">
+              <strong className="text-app-text block">National Blood Transfusion Council (NBTC) Minimum Intervals:</strong>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                <div>• Whole Blood (Male): 90 days (max 4 times/yr)</div>
+                <div>• Whole Blood (Female): 120 days (max 3 times/yr)</div>
+                <div>• Single Donor Platelets (Apheresis): 14 days (max 24 times/yr)</div>
+                <div>• Apheresis Plasma: 28 days</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Voluntary Donation Log */}
+          <div className="bg-app-surface border border-app-border rounded-xl shadow-subtle p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-app-border">
+              <div className="flex items-center gap-2">
+                <Droplet className="w-4 h-4 text-brand" />
+                <h3 className="text-sm font-bold text-app-text font-display">
+                  Voluntary Donation History & Clinical Log
+                </h3>
+              </div>
+              <span className="text-xs font-mono font-bold text-brand bg-brand-light px-2.5 py-0.5 rounded-md border border-brand/20">
+                {activeDonor.totalDonations || 0} Recorded Donation(s)
+              </span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-app-muted/30 border border-app-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="font-bold text-app-text block text-sm">
+                  {activeDonor.lastDonatedComponent || 'Whole Blood'} Donation
+                </span>
+                <span className="text-[11px] text-app-text-secondary">
+                  Recorded in CareLoop Clinical Transfusion Registry for biological interval compliance.
+                </span>
+              </div>
+              <div className="text-left sm:text-right">
+                <span className="text-[10px] uppercase font-bold text-app-text-secondary block">Last Donated Date</span>
+                <span className="font-mono text-xs font-bold text-app-text bg-app-surface px-2.5 py-1 rounded border border-app-border inline-block mt-0.5">
+                  {activeDonor.lastDonatedAt ? new Date(activeDonor.lastDonatedAt).toLocaleDateString() : 'Verified on file'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clinical Correction Modal Dialog */}
+      {isCorrectionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-app-surface border border-app-border rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-5 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-app-border pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-brand/10 text-brand flex items-center justify-center font-bold">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-app-text font-display">
+                    Request Clinical Data Correction
+                  </h3>
+                  <p className="text-[11px] text-app-text-secondary">
+                    Changes require validation by an accredited blood centre.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCorrectionModalOpen(false)}
+                className="text-app-text-secondary hover:text-app-text p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {correctionStatus.type === 'error' && (
+              <div className="p-3 rounded-lg bg-red-50 text-emergency border border-red-200 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{correctionStatus.message}</span>
+              </div>
+            )}
+
+            {correctionStatus.type === 'success' && (
+              <div className="p-3 rounded-lg bg-success-light text-success border border-success-border text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{correctionStatus.message}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitClinicalCorrection} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-app-text-secondary uppercase mb-1">
+                  Field Requiring Correction <span className="text-emergency">*</span>
+                </label>
+                <select
+                  value={correctionField}
+                  onChange={(e) => setCorrectionField(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-app-border bg-app-surface text-app-text font-semibold"
+                >
+                  <option value="bloodGroup">Blood Group (Currently: {activeDonor.bloodGroup})</option>
+                  <option value="weightKg">Body Weight (Currently: {activeDonor.weightKg ? `${activeDonor.weightKg} kg` : 'Unspecified'})</option>
+                  <option value="biologicalSex">Biological Sex (Male / Female)</option>
+                  <option value="lastDonatedAt">Last Donation Date</option>
+                  <option value="other">Other Clinical Parameter</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-app-text-secondary uppercase mb-1">
+                  Requested Correct Value <span className="text-emergency">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={correctionRequestedValue}
+                  onChange={(e) => setCorrectionRequestedValue(e.target.value)}
+                  placeholder="e.g. O+ or 65 kg"
+                  required
+                  className="w-full p-2.5 rounded-lg border border-app-border bg-app-surface text-app-text"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-app-text-secondary uppercase mb-1">
+                  Clinical Justification / Reason <span className="text-emergency">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={correctionReason}
+                  onChange={(e) => setCorrectionReason(e.target.value)}
+                  placeholder="Please state why this field needs correction (e.g., initial typing error, re-confirmed by blood bank lab report)."
+                  required
+                  className="w-full p-2.5 rounded-lg border border-app-border bg-app-surface text-app-text"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-app-text-secondary uppercase mb-1">
+                  Lab / Blood Centre Certificate Reference (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={correctionCertificateNotes}
+                  onChange={(e) => setCorrectionCertificateNotes(e.target.value)}
+                  placeholder="e.g. Red Cross Hyderabad Lab Report #RC-2026-991"
+                  className="w-full p-2.5 rounded-lg border border-app-border bg-app-surface text-app-text"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-app-border">
+                <button
+                  type="button"
+                  onClick={() => setIsCorrectionModalOpen(false)}
+                  disabled={correctionStatus.type === 'submitting'}
+                  className="px-4 py-2 rounded-lg border border-app-border bg-app-surface text-app-text font-semibold text-xs hover:bg-app-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={correctionStatus.type === 'submitting'}
+                  className="px-5 py-2 rounded-lg bg-brand hover:bg-brand-dark text-white font-bold text-xs flex items-center gap-1.5 shadow-xs"
+                >
+                  {correctionStatus.type === 'submitting' ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  <span>{correctionStatus.type === 'submitting' ? 'Submitting...' : 'Submit Request'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

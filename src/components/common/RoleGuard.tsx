@@ -11,7 +11,7 @@ interface RoleGuardProps {
 }
 
 export const RoleGuard: React.FC<RoleGuardProps> = ({ allowedRoles, children }) => {
-  const { currentRole, authenticatedRole, currentUser, isAuthLoading, authError, signOut } = useBloodStore();
+  const { currentRole, authenticatedRole, currentUser, isRegisteredDonor, isAuthLoading, authError, signOut } = useBloodStore();
   const location = useLocation();
 
   // 1. Loading state during auth session / profile loading from Supabase
@@ -68,7 +68,16 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({ allowedRoles, children }) 
   }
 
   // 4. Authenticated user authorization check
-  const isAllowed = allowedRoles.includes(authenticatedRole);
+  // One Account Architecture (Patient + Donor Dual Capabilities):
+  // - A registered donor profile on the authenticated user account unlocks the Donor Workspace (/donor).
+  // - A registered donor account can also access the Patient Workspace (/patient) to create/track requests.
+  const isDonorAllowed = allowedRoles.includes('donor') && (authenticatedRole === 'donor' || isRegisteredDonor);
+  const isPatientAllowed = allowedRoles.includes('patient') && (authenticatedRole === 'patient' || isRegisteredDonor || authenticatedRole === 'donor');
+
+  const isAllowed =
+    allowedRoles.includes(authenticatedRole) ||
+    isDonorAllowed ||
+    isPatientAllowed;
 
   // 5. If unauthorized, render AccessRestrictedView to clearly show the authorization boundary
   if (!isAllowed) {
