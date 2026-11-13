@@ -18,6 +18,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { isClinicallyCompatible } from '../matchingEngine';
 
 export interface InboundSmsPayload {
   sender: string;       // Sender phone: "+91 98490 12345" or "919849012345"
@@ -159,7 +160,7 @@ export async function processInboundSms(
       // Find request by reference code
       const { data: reqs } = await supabase
         .from('emergency_requests')
-        .select('id, reference_code, blood_group, component, hospital_name, city, status')
+        .select('id, reference_code, blood_group, component, hospital_name, city, status, created_by')
         .or(`reference_code.ilike.%${explicitRefCode}%,reference_code.ilike.%CL-${explicitRefCode}%`)
         .limit(1);
 
@@ -183,7 +184,7 @@ export async function processInboundSms(
           if (reqId) {
             const { data: reqData } = await supabase
               .from('emergency_requests')
-              .select('id, reference_code, blood_group, component, hospital_name, city, status')
+              .select('id, reference_code, blood_group, component, hospital_name, city, status, created_by')
               .eq('id', reqId)
               .maybeSingle();
 
@@ -200,7 +201,7 @@ export async function processInboundSms(
       // Secondary Fallback: Find latest open emergency request in donor's city matching their blood group
       const { data: openReqs } = await supabase
         .from('emergency_requests')
-        .select('id, reference_code, blood_group, component, hospital_name, city, status')
+        .select('id, reference_code, blood_group, component, hospital_name, city, status, created_by')
         .eq('blood_group', donor.blood_group)
         .ilike('city', `%${donor.city}%`)
         .not('status', 'in', '("FULFILLED","CANCELLED","EXPIRED")')
@@ -233,7 +234,32 @@ export async function processInboundSms(
       };
     }
 
-    // 4. Clinical Eligibility Check: Verify deferral and availability
+    // 3.1 Anti-Self-Match: Creator of emergency request cannot accept their own request
+    if (targetRequest.created_by && donor.profile_id && targetRequest.created_by === donor.profile_id) {
+      return {
+        success: false,
+        action: 'ERROR',
+        donorId: donor.id,
+        requestId: targetRequest.id,
+        referenceCode: targetRequest.reference_code,
+        replyMessage: 'CareLoop: Anti-Self-Match: Donors cannot accept emergency requests created by their own user account.',
+        error: 'ANTI_SELF_MATCH',
+      };
+    }
+
+    // 4. Clinical Eligibility Check: Verify deferral, medical clearance and availability
+    if (donor.is_medically_cleared === false) {
+      return {
+        success: false,
+        action: 'ERROR',
+        donorId: donor.id,
+        requestId: targetRequest.id,
+        referenceCode: targetRequest.reference_code,
+        replyMessage: 'CareLoop: Your profile has an unresolved medical clearance hold. Acceptance cannot be processed.',
+        error: 'DONOR_NOT_MEDICALLY_CLEARED',
+      };
+    }
+
     if (donor.deferral_until) {
       const deferralDate = new Date(donor.deferral_until);
       if (deferralDate > new Date()) {
@@ -244,6 +270,26 @@ export async function processInboundSms(
           requestId: targetRequest.id,
           referenceCode: targetRequest.reference_code,
           replyMessage: `CareLoop: Your profile is under medical deferral until ${deferralDate.toLocaleDateString()}. Acceptance cannot be processed.`,
+        };
+      }
+    }
+
+    // 4.1 Server-Authoritative ABO/Rh & Component Clinical Compatibility Check
+    if (command === 'ACCEPT') {
+      const compCheck = isClinicallyCompatible(
+        targetRequest.blood_group,
+        donor.blood_group,
+        targetRequest.component || 'Whole Blood'
+      );
+      if (!compCheck.compatible) {
+        return {
+          success: false,
+          action: 'ERROR',
+          donorId: donor.id,
+          requestId: targetRequest.id,
+          referenceCode: targetRequest.reference_code,
+          replyMessage: `CareLoop: Donor blood group ${donor.blood_group} is not clinically compatible with requested ${targetRequest.blood_group} ${targetRequest.component || 'blood'} (${targetRequest.reference_code}).`,
+          error: `CLINICAL_INCOMPATIBILITY: Donor ${donor.blood_group} is not compatible with patient ${targetRequest.blood_group} ${targetRequest.component || 'blood'}`,
         };
       }
     }

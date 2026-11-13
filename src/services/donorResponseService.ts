@@ -219,6 +219,45 @@ export async function acceptRequestAndCreateConversation(
     return { success: false, error: 'Request ID is required.' };
   }
 
+  // 1. In browser environment with active auth session, invoke authoritative /api/accept-request
+  if (typeof window !== 'undefined' && typeof fetch === 'function') {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (accessToken) {
+        const apiResponse = await fetch('/api/accept-request', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ requestId, donorId }),
+        });
+
+        if (apiResponse.ok) {
+          const apiData = await apiResponse.json();
+          if (apiData.success) {
+            return {
+              success: true,
+              conversationId: apiData.conversationId,
+              requestId: apiData.requestId,
+              donorName: apiData.donorName,
+              alreadyAccepted: Boolean(apiData.alreadyAccepted),
+            };
+          }
+        } else if (apiResponse.status >= 400 && apiResponse.status < 500) {
+          const errData = await apiResponse.json().catch(() => ({}));
+          return {
+            success: false,
+            error: errData.error || 'Failed to accept emergency request.',
+          };
+        }
+      }
+    } catch {
+      // Fall through to database RPC fallback
+    }
+  }
+
   try {
     const params: Record<string, any> = {
       p_request_id: requestId,
