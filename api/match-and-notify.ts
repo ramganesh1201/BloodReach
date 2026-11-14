@@ -215,7 +215,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   // 2. Caller Authorization
-  const authHeader = req.headers['authorization'] || '';
   let callerUserId: string | null = null;
   let isAuthorizedStaff = false;
 

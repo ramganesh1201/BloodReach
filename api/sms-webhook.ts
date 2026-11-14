@@ -22,7 +22,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'http';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const MAX_PAYLOAD_BYTES = 16384; // 16 KB payload guard
@@ -106,11 +106,11 @@ const IDEMPOTENCY_TTL_MS = 60 * 60 * 1000; // 1 hour
 function isMessageAlreadyProcessed(messageId?: string): boolean {
   if (!messageId) return false;
   const now = Date.now();
-  for (const [id, timestamp] of processedMessageIds.entries()) {
+  processedMessageIds.forEach((timestamp, id) => {
     if (now - timestamp > IDEMPOTENCY_TTL_MS) {
       processedMessageIds.delete(id);
     }
-  }
+  });
   return processedMessageIds.has(messageId);
 }
 

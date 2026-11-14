@@ -19,7 +19,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'http';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Configuration constants
