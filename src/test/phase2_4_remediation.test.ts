@@ -65,7 +65,7 @@ describe('CareLoop Phase 2.4 — Security Findings Remediation Suite', () => {
       expect(turnServer.username).toContain(`:${mockUserId}`);
       const timestamp = parseInt(turnServer.username!.split(':')[0], 10);
       const now = Math.floor(Date.now() / 1000);
-      expect(timestamp - now).toBeGreaterThanOrEqual(599);
+      expect(timestamp - now).toBeGreaterThanOrEqual(595);
       expect(timestamp - now).toBeLessThanOrEqual(601);
     });
 

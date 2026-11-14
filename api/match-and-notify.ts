@@ -99,16 +99,21 @@ function calculateHaversineDistanceKm(lat1: number, lon1: number, lat2: number, 
   return Number((R * c).toFixed(1));
 }
 
-function getServerSupabaseClient(): SupabaseClient | null {
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+function getServerSupabaseClient(authHeader?: string): SupabaseClient | null {
+  const supabaseUrl =
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    'https://uzwtchnqmveapzehuafb.supabase.co';
   const serviceKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_ANON_KEY ||
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    'sb_publishable_zBAqRhIEnx0_4OPm4GLttQ_U3ra_svx';
 
   if (!supabaseUrl || !serviceKey) return null;
   return createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false },
+    global: authHeader ? { headers: { Authorization: authHeader } } : undefined,
   });
 }
 
@@ -161,7 +166,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  const supabase = getServerSupabaseClient();
+  const authHeader = (req.headers['authorization'] || req.headers['Authorization'] || '') as string;
+  const supabase = getServerSupabaseClient(authHeader);
   if (!supabase) {
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');

@@ -97,11 +97,15 @@ function isClinicallyCompatible(
 // SUPABASE CLIENT & PAYLOAD PARSER
 // ============================================================================
 function getServerSupabaseClient(): SupabaseClient | null {
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseUrl =
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    'https://uzwtchnqmveapzehuafb.supabase.co';
   const serviceKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_ANON_KEY ||
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    'sb_publishable_zBAqRhIEnx0_4OPm4GLttQ_U3ra_svx';
 
   if (!supabaseUrl || !serviceKey) return null;
   return createClient(supabaseUrl, serviceKey, {
