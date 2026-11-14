@@ -1,4 +1,4 @@
-// Service Worker for BloodReach / CareLoop PWA offline shell support
+// Service Worker for CareLoop PWA
 // Integrates with Firebase Cloud Messaging background handler
 
 try {
@@ -7,18 +7,17 @@ try {
   // Fallback if running offline or firebase script unavailable
 }
 
-const CACHE_NAME = 'bloodreach-cache-v2';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
+const CACHE_NAME = 'careloop-cache-v3';
+const IMMUTABLE_ASSETS = [
   '/manifest.json',
-  '/favicon.svg'
+  '/favicon.svg',
+  '/logo.svg'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      return cache.addAll(IMMUTABLE_ASSETS);
     })
   );
   self.skipWaiting();
@@ -46,7 +45,7 @@ self.addEventListener('fetch', (event) => {
   // Network-first for navigation requests and index.html to prevent stale chunk hash mismatches
   if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-cache' })
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const clone = networkResponse.clone();
@@ -63,13 +62,35 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        return cachedResponse;
+        // Guard against corrupted HTML cached as JS
+        const contentType = cachedResponse.headers.get('content-type') || '';
+        if (url.pathname.endsWith('.js') && contentType.includes('text/html')) {
+          caches.open(CACHE_NAME).then((cache) => cache.delete(event.request));
+        } else {
+          return cachedResponse;
+        }
       }
+
       return fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && (url.pathname.startsWith('/assets/') || url.pathname.endsWith('.svg') || url.pathname.endsWith('.json'))) {
+        if (!networkResponse || networkResponse.status !== 200) {
+          return networkResponse;
+        }
+
+        const contentType = networkResponse.headers.get('content-type') || '';
+
+        // STRICT GUARD: Never cache text/html responses for .js or .css asset requests (Vercel 404 rewrite fallback)
+        if (url.pathname.endsWith('.js') && !contentType.includes('javascript')) {
+          return networkResponse;
+        }
+        if (url.pathname.endsWith('.css') && !contentType.includes('css')) {
+          return networkResponse;
+        }
+
+        if (url.pathname.startsWith('/assets/') || url.pathname.endsWith('.svg') || url.pathname.endsWith('.json')) {
           const clone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
+
         return networkResponse;
       });
     })

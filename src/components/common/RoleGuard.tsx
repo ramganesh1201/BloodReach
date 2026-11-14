@@ -11,7 +11,7 @@ interface RoleGuardProps {
 }
 
 export const RoleGuard: React.FC<RoleGuardProps> = ({ allowedRoles, children }) => {
-  const { currentRole, authenticatedRole, currentUser, isRegisteredDonor, isAuthLoading, authError, signOut } = useBloodStore();
+  const { currentRole, authenticatedRole, currentUser, isRegisteredDonor, isAuthLoading, authError, signOut, demoExperience } = useBloodStore();
   const location = useLocation();
 
   // 1. Loading state during auth session / profile loading from Supabase
@@ -62,12 +62,25 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({ allowedRoles, children }) 
     );
   }
 
-  // 3. Unauthenticated user: Not signed in with a verified session
+  // 3. Demo Role Preview Execution
+  if (demoExperience) {
+    const isAllowedDemo =
+      allowedRoles.includes(demoExperience as UserRole) ||
+      (allowedRoles.includes('donor') && demoExperience === 'donor') ||
+      (allowedRoles.includes('patient') && (demoExperience === 'patient' || demoExperience === 'donor'));
+
+    if (isAllowedDemo) {
+      return <>{children}</>;
+    }
+    return <AccessRestrictedView allowedRoles={allowedRoles} />;
+  }
+
+  // 4. Unauthenticated user: Not signed in with a verified session
   if (!authenticatedRole || !currentUser) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
-  // 4. Authenticated user authorization check
+  // 5. Authenticated user authorization check
   // One Account Architecture (Patient + Donor Dual Capabilities):
   // - A registered donor profile on the authenticated user account unlocks the Donor Workspace (/donor).
   // - A registered donor account can also access the Patient Workspace (/patient) to create/track requests.
@@ -79,7 +92,7 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({ allowedRoles, children }) 
     isDonorAllowed ||
     isPatientAllowed;
 
-  // 5. If unauthorized, render AccessRestrictedView to clearly show the authorization boundary
+  // 6. If unauthorized, render AccessRestrictedView to clearly show the authorization boundary
   if (!isAllowed) {
     return <AccessRestrictedView allowedRoles={allowedRoles} />;
   }

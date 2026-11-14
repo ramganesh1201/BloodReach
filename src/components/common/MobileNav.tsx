@@ -28,9 +28,16 @@ export const MobileNav: React.FC = () => {
       }`}>
         {mobileNavItems.map((item) => {
           const Icon = item.icon;
-          const active = item.exact
-            ? location.pathname === item.path
-            : location.pathname.startsWith(item.path);
+          const [itemPath, itemQuery] = item.path.split('?');
+          let active = false;
+
+          if (itemQuery) {
+            active = location.pathname === itemPath && location.search.includes(itemQuery);
+          } else if (item.exact) {
+            active = location.pathname === itemPath && (!location.search || location.search === '');
+          } else {
+            active = location.pathname === itemPath || (itemPath !== '/' && location.pathname.startsWith(`${itemPath}/`));
+          }
 
           return (
             <Link

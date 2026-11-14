@@ -45,7 +45,7 @@ export const DESKTOP_NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   donor: [
     { path: '/', label: 'Home', icon: Home, exact: true },
     { path: '/donor', label: 'Find Requests', icon: Droplet },
-    { path: '/donor?tab=commitments', label: 'My Commitments', icon: History },
+    { path: '/donor?tab=history', label: 'My Donations', icon: History },
     { path: '/communication', label: 'Communication', icon: MessageSquare },
   ],
   blood_centre: [
@@ -83,8 +83,9 @@ export const MOBILE_NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   ],
   donor: [
     { path: '/', label: 'Home', icon: Home, exact: true },
-    { path: '/donor', label: 'Alerts', icon: Droplet },
+    { path: '/donor', label: 'Alerts', icon: Droplet, exact: true },
     { path: '/communication', label: 'Messages', icon: MessageSquare },
+    { path: '/donor?tab=profile', label: 'Profile', icon: User },
   ],
   blood_centre: [
     { path: '/', label: 'Home', icon: Home, exact: true },

@@ -280,3 +280,7 @@ BEGIN
     );
 END;
 $$;
+
+-- 3. Explicit permissions
+GRANT EXECUTE ON FUNCTION public.is_blood_compatible(VARCHAR, VARCHAR, VARCHAR) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.accept_request_and_create_conversation(UUID, UUID) TO authenticated, service_role;

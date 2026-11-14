@@ -145,22 +145,22 @@ export const Header: React.FC = () => {
       <header className="sticky top-0 z-40 bg-app-surface/95 backdrop-blur-md border-b border-app-border shadow-subtle transition-all">
         {/* Top Status & Role Indicator Bar */}
         {authenticatedRole ? (
-          <div className="bg-app-text text-app-muted text-xs py-1.5 px-4 border-b border-app-text/20">
-            <div className="max-w-7xl mx-auto flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-success/20 text-success-light border border-success/30 uppercase tracking-wider">
+          <div className="bg-app-text text-app-muted text-xs py-1.5 px-3 sm:px-4 border-b border-app-text/20">
+            <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-success/20 text-success-light border border-success/30 uppercase tracking-wider shrink-0">
                   VERIFIED SESSION
                 </span>
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 uppercase tracking-wider">
+                <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 uppercase tracking-wider shrink-0">
                   PostgreSQL Mode
                 </span>
-                <span className="text-white font-semibold text-xs">
+                <span className="text-white font-semibold text-xs truncate max-w-[100px] sm:max-w-none">
                   {currentUser?.fullName || ROLE_DISPLAY_NAMES[authenticatedRole]}
                 </span>
-                <span className="text-app-muted/70 text-[11px]">({ROLE_DISPLAY_NAMES[authenticatedRole]})</span>
+                <span className="hidden md:inline text-app-muted/70 text-[11px]">({ROLE_DISPLAY_NAMES[authenticatedRole]})</span>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                 {isOffline && (
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-warning-light bg-warning-dark/50 px-2 py-0.5 rounded-sm">
                     <WifiOff className="w-3 h-3" /> Offline Mode
@@ -178,28 +178,29 @@ export const Header: React.FC = () => {
             </div>
           </div>
         ) : demoExperience ? (
-          <div className="bg-app-text text-app-muted text-xs py-1.5 px-4 border-b border-app-text/20">
-            <div className="max-w-7xl mx-auto flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-warning/20 text-warning-light border border-warning/30 uppercase tracking-wider">
+          <div className="bg-app-text text-app-muted text-xs py-1.5 px-3 sm:px-4 border-b border-app-text/20">
+            <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-warning/20 text-warning-light border border-warning/30 uppercase tracking-wider shrink-0">
                   ROLE PREVIEW
                 </span>
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase tracking-wider">
+                <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase tracking-wider shrink-0">
                   Demo Fixtures
                 </span>
-                <span className="text-app-muted font-medium text-xs">
+                <span className="text-app-muted font-medium text-xs truncate max-w-[120px] sm:max-w-none">
                   Active as <strong className="text-white">{ROLE_DISPLAY_NAMES[demoExperience]}</strong>
                 </span>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={handleExitDemo}
                   className="bg-app-text/60 hover:bg-app-text text-white text-xs font-semibold px-2 py-0.5 rounded-sm transition-colors flex items-center gap-1 border border-app-border/30"
                 >
                   <LogOut className="w-3 h-3 text-warning" />
-                  <span>Exit Role Preview</span>
+                  <span className="hidden sm:inline">Exit Role Preview</span>
+                  <span className="sm:hidden">Exit</span>
                 </button>
               </div>
             </div>

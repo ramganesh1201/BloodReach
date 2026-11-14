@@ -3,15 +3,24 @@
   "short_name": "CareLoop",
   "description": "Real-time emergency blood coordination connecting patients, accredited blood banks, and verified volunteer donors.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#F8FAFC",
-  "theme_color": "#DC2626",
+  "orientation": "portrait",
+  "background_color": "#F8F9F8",
+  "theme_color": "#B42332",
+  "categories": ["medical", "health"],
   "icons": [
     {
       "src": "/favicon.svg",
       "sizes": "192x192 512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { AvailabilityToggle } from '../components/donor/AvailabilityToggle';
 import { EmergencyCard } from '../components/donor/EmergencyCard';
@@ -57,6 +57,22 @@ export type DonorTab =
   | 'availability'
   | 'profile';
 
+const resolveTab = (tab: string | null): DonorTab => {
+  if (!tab) return 'overview';
+  if (tab === 'commitments') return 'history';
+  const validTabs: DonorTab[] = [
+    'overview',
+    'matches',
+    'notifications',
+    'history',
+    'communication',
+    'availability',
+    'profile',
+  ];
+  if (validTabs.includes(tab as DonorTab)) return tab as DonorTab;
+  return 'overview';
+};
+
 export const DonorView: React.FC = () => {
   const {
     donors,
@@ -76,7 +92,22 @@ export const DonorView: React.FC = () => {
   } = useBloodStore();
 
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<DonorTab>('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<DonorTab>(() => resolveTab(searchParams.get('tab')));
+
+  // Keep activeTab synchronized with searchParams
+  useEffect(() => {
+    const currentTabInUrl = searchParams.get('tab');
+    const resolved = resolveTab(currentTabInUrl);
+    if (resolved !== activeTab) {
+      setActiveTab(resolved);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (newTab: DonorTab) => {
+    setActiveTab(newTab);
+    setSearchParams({ tab: newTab }, { replace: true });
+  };
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
@@ -417,8 +448,112 @@ export const DonorView: React.FC = () => {
         }
       />
 
-      {/* KPI Stats Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Mobile Donor Quick Card (Answering 6 Core Questions Immediately Without Stat Bloat) */}
+      <div className="block sm:hidden bg-app-surface border border-app-border rounded-2xl p-4 shadow-subtle space-y-4">
+        {/* 1. Am I registered? Status, Blood Group & Availability */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-xl bg-brand text-white flex items-center justify-center font-black text-xl shadow-xs font-display shrink-0">
+              {activeDonor.bloodGroup}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-bold text-sm text-app-text font-display truncate">
+                  {activeDonor.fullName}
+                </span>
+                <span className="text-[9px] font-bold bg-success-light text-success border border-success-border px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0">
+                  <CheckCircle2 className="w-2.5 h-2.5" /> Registered
+                </span>
+              </div>
+              <p className="text-[11px] text-app-text-secondary truncate">
+                {activeDonor.city || 'Emergency Dispatch'} • {livesImpacted} Lives Saved
+              </p>
+            </div>
+          </div>
+
+          <div className="shrink-0">
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                activeDonor.isAvailable
+                  ? 'bg-success-light text-success border-success-border'
+                  : 'bg-warning-light text-warning-dark border-warning-border'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${activeDonor.isAvailable ? 'bg-success animate-pulse' : 'bg-warning-dark'}`} />
+              {activeDonor.isAvailable ? 'Ready' : 'Paused'}
+            </span>
+          </div>
+        </div>
+
+        {/* 2. Am I currently available? Immediate Toggle */}
+        <div className="pt-0.5">
+          <AvailabilityToggle
+            currentState={donorAvailabilityState}
+            updatedAt={activeDonor.availabilityUpdatedAt}
+            onSelectState={(state) => setDonorAvailabilityState(activeDonor.id, state)}
+          />
+        </div>
+
+        {/* 3 & 4. Emergencies matching my blood & Action I can take right now */}
+        {activeRequests.length > 0 ? (
+          <div className="bg-brand/5 border border-brand/20 rounded-xl p-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-brand text-white flex items-center justify-center shrink-0">
+                <Bell className="w-4 h-4 animate-bounce" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-brand block truncate">
+                  {activeRequests.length} Urgent {activeRequests.length === 1 ? 'Emergency' : 'Emergencies'} Near You
+                </span>
+                <span className="text-[10px] text-app-text-secondary truncate block">
+                  Compatible with {activeDonor.bloodGroup} in your area
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleTabChange('matches')}
+              className="px-3 py-1.5 bg-brand hover:bg-brand-dark text-white rounded-lg text-xs font-bold shrink-0 transition-colors inline-flex items-center gap-1 shadow-xs"
+            >
+              <span>Respond</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+        ) : (
+          <div className="bg-success-light/40 border border-success-border rounded-xl p-3 flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-success block">On Standby • No Immediate Calls</span>
+              <span className="text-[10px] text-app-text-secondary block">
+                Instant alerts will be dispatched when blood is requested.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* 5 & 6. Where can I update my profile / see previous activity? */}
+        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-app-border">
+          <button
+            type="button"
+            onClick={() => handleTabChange('profile')}
+            className="py-2 px-2.5 rounded-lg bg-app-muted hover:bg-app-border text-app-text text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <User className="w-3.5 h-3.5 text-app-text-secondary shrink-0" />
+            <span className="truncate">Edit Profile</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange('history')}
+            className="py-2 px-2.5 rounded-lg bg-app-muted hover:bg-app-border text-app-text text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <Droplet className="w-3.5 h-3.5 text-brand shrink-0" />
+            <span className="truncate">Donations ({activeDonor.totalDonations || 0})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Stats Row (Desktop / Tablet only to prevent mobile bloat) */}
+      <div className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Compatible Emergencies"
           value={activeRequests.length}
@@ -464,7 +599,7 @@ export const DonorView: React.FC = () => {
       </div>
 
       {/* 7 Dedicated Tabs Navigation Bar */}
-      <div className="flex items-center gap-1.5 border-b border-app-border pb-3 text-xs font-bold overflow-x-auto">
+      <div className="flex items-center gap-1.5 border-b border-app-border pb-3 text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth">
         {[
           { id: 'overview', label: 'Overview', icon: Heart },
           { id: 'matches', label: `Matching Requests (${activeRequests.length})`, icon: Bell },
@@ -480,8 +615,8 @@ export const DonorView: React.FC = () => {
             <button
               key={t.id}
               type="button"
-              onClick={() => setActiveTab(t.id as DonorTab)}
-              className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${
+              onClick={() => handleTabChange(t.id as DonorTab)}
+              className={`py-2 px-3.5 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
                 isActive
                   ? 'bg-brand text-white shadow-xs font-bold'
                   : 'text-app-text-secondary hover:text-app-text hover:bg-app-muted font-medium'
@@ -497,8 +632,8 @@ export const DonorView: React.FC = () => {
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="space-y-6 animate-fade-in">
-          {/* Hero Profile Status Card */}
-          <div className="bg-app-surface border border-app-border rounded-2xl p-5 sm:p-6 shadow-subtle space-y-4">
+          {/* Hero Profile Status Card (Desktop only since Mobile Quick Card covers identity) */}
+          <div className="hidden sm:block bg-app-surface border border-app-border rounded-2xl p-5 sm:p-6 shadow-subtle space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-brand text-white flex items-center justify-center font-black text-2xl shadow-subtle font-display shrink-0">
@@ -551,6 +686,27 @@ export const DonorView: React.FC = () => {
             </div>
           </div>
 
+          {/* Interval Status Banner (Mobile-specific concise view) */}
+          <div className="block sm:hidden bg-app-surface border border-app-border rounded-xl p-3.5 shadow-subtle flex items-start gap-2.5 text-xs">
+            <Award className="w-4 h-4 text-warning-dark shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-app-text block">
+                {isUndetermined
+                  ? 'Interval Assessment Required'
+                  : eligibility.isEligible
+                  ? 'Interval-Eligible for Transfusion'
+                  : 'Donation Interval Active'}
+              </span>
+              <p className="text-[10px] text-app-text-secondary leading-relaxed mt-0.5">
+                {isUndetermined
+                  ? 'NBTC interval clearance and vitals will be checked on-site by blood centre staff.'
+                  : eligibility.isEligible
+                  ? 'Safe interval satisfied under NBTC guidelines. Vitals verified on-site.'
+                  : eligibility.reason}
+              </p>
+            </div>
+          </div>
+
           {/* Urgent Needs Near You Preview */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -560,7 +716,7 @@ export const DonorView: React.FC = () => {
               {activeRequests.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setActiveTab('matches')}
+                  onClick={() => handleTabChange('matches')}
                   className="text-xs font-bold text-brand hover:underline inline-flex items-center gap-1"
                 >
                   <span>View All Matches</span>
