@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useBloodStore } from '../../store/useBloodStore';
 import { MOBILE_NAV_BY_ROLE, NavItem } from '../../config/navigation';
-import { Home, Droplet, Shield, Activity } from 'lucide-react';
+import { Home, Droplet, Shield, Activity, Heart, MessageSquare, UserRound } from 'lucide-react';
 
 const PUBLIC_MOBILE_NAV: NavItem[] = [
   { path: '/', label: 'Home', icon: Home, exact: true },
@@ -12,11 +12,21 @@ const PUBLIC_MOBILE_NAV: NavItem[] = [
 ];
 
 export const MobileNav: React.FC = () => {
-  const { authenticatedRole, demoExperience } = useBloodStore();
+  const { authenticatedRole, demoExperience, isRegisteredDonor } = useBloodStore();
   const location = useLocation();
 
   const effectiveRole = authenticatedRole || demoExperience;
-  const mobileNavItems = effectiveRole ? (MOBILE_NAV_BY_ROLE[effectiveRole] || PUBLIC_MOBILE_NAV) : PUBLIC_MOBILE_NAV;
+  let mobileNavItems: NavItem[] = effectiveRole ? (MOBILE_NAV_BY_ROLE[effectiveRole] || PUBLIC_MOBILE_NAV) : PUBLIC_MOBILE_NAV;
+
+  if (effectiveRole === 'patient' && isRegisteredDonor) {
+    mobileNavItems = [
+      { path: '/', label: 'Home', icon: Home, exact: true },
+      { path: '/patient', label: 'Requests', icon: UserRound },
+      { path: '/request', label: 'Request', icon: Droplet },
+      { path: '/donor', label: 'Donor Hub', icon: Heart },
+      { path: '/communication', label: 'Messages', icon: MessageSquare },
+    ];
+  }
 
   return (
     <nav

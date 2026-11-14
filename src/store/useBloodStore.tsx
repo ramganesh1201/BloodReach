@@ -657,7 +657,27 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return INITIAL_INVENTORY;
   });
 
-  const [donors, setDonors] = useState<Donor[]>(INITIAL_DONORS);
+  const [donors, setDonors] = useState<Donor[]>(() => {
+    let initialList = [...INITIAL_DONORS];
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const savedUserProfile = localStorage.getItem('careloop_user_profile');
+        if (savedUserProfile) {
+          const uProfile = JSON.parse(savedUserProfile);
+          if (uProfile?.id) {
+            const cachedDonor = localStorage.getItem(`careloop_donor_profile_${uProfile.id}`);
+            if (cachedDonor) {
+              const d = JSON.parse(cachedDonor);
+              initialList = [d, ...initialList.filter((item) => item.profileId !== uProfile.id)];
+            }
+          }
+        }
+      } catch {
+        // Fallback to initial donors
+      }
+    }
+    return initialList;
+  });
   const [donorResponses, setDonorResponses] = useState<DonorResponse[]>(() => {
     const saved = localStorage.getItem('careloop_donor_responses');
     if (saved) {
@@ -814,6 +834,18 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             localStorage.setItem('careloop_auth_role', verifiedRole);
             sessionStorage.removeItem('careloop_demo_experience');
             notificationService.initUserSession(session.user.id);
+
+            // Authoritatively hydrate donor registration profile for this account
+            try {
+              const donorRes = await donorResponseService.getDonorProfileByUserId(session.user.id);
+              if (donorRes.success && donorRes.data && isMounted) {
+                const userDonor = donorRes.data;
+                setDonors((prev) => [userDonor, ...prev.filter((d) => d.profileId !== session.user.id)]);
+                localStorage.setItem(`careloop_donor_profile_${session.user.id}`, JSON.stringify(userDonor));
+              }
+            } catch (dErr) {
+              console.warn('[CareLoop Auth] Donor profile hydration failed:', dErr);
+            }
           } else if (isMounted) {
             // User in auth.users but no profile row found
             setCurrentUser(null);
@@ -879,6 +911,18 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             localStorage.setItem('careloop_auth_role', verifiedRole);
             sessionStorage.removeItem('careloop_demo_experience');
             notificationService.initUserSession(session.user.id);
+
+            // Authoritatively hydrate donor registration profile for this account
+            try {
+              const donorRes = await donorResponseService.getDonorProfileByUserId(session.user.id);
+              if (donorRes.success && donorRes.data && isMounted) {
+                const userDonor = donorRes.data;
+                setDonors((prev) => [userDonor, ...prev.filter((d) => d.profileId !== session.user.id)]);
+                localStorage.setItem(`careloop_donor_profile_${session.user.id}`, JSON.stringify(userDonor));
+              }
+            } catch (dErr) {
+              console.warn('[CareLoop Auth] Donor profile hydration failed:', dErr);
+            }
           }
         } catch (err) {
           console.warn('[CareLoop Auth] Profile sync error:', err);
@@ -2219,6 +2263,8 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return { success: false, error: 'User must be authenticated to submit donor registration.' };
     }
 
+    let registeredDonor: Donor | null = null;
+
     if (dataSource === 'database' && isSupabaseConfigured) {
       setBackendError(null);
       const res = await donorResponseService.submitDonorOnboarding(input, currentUser.id);
@@ -2227,6 +2273,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return { success: false, error: res.error };
       }
       if (res.data) {
+        registeredDonor = res.data;
         setDonors((prev) => [res.data!, ...prev.filter((d) => d.profileId !== currentUser.id)]);
       }
     } else {
@@ -2250,7 +2297,16 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         totalDonations: input.donationHistory,
         registeredAt: new Date().toISOString(),
       };
+      registeredDonor = newDonor;
       setDonors((prev) => [newDonor, ...prev.filter((d) => d.profileId !== currentUser.id)]);
+    }
+
+    if (registeredDonor) {
+      try {
+        localStorage.setItem(`careloop_donor_profile_${currentUser.id}`, JSON.stringify(registeredDonor));
+      } catch {
+        // Ignored
+      }
     }
 
     // If currentUser bloodGroup was missing, update it
@@ -2272,8 +2328,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       metadata: { role: 'coordinator' },
     });
 
-    const registeredDonor = donors.find((d) => d.profileId === currentUser.id);
-    return { success: true, data: registeredDonor };
+    return { success: true, data: registeredDonor || undefined };
   };
 
   const updateDonorContactInfo = async (

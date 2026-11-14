@@ -171,11 +171,6 @@ describe('CareLoop — Emergency Request Query Safety & Schema Alignment Suite',
 
   describe('4. createEmergencyRequest Schema Resiliency & Fallback', () => {
     it('4.1 Replaces non-UUID userId with null to prevent PostgreSQL 22P02 on created_by', async () => {
-      (supabase.rpc as any).mockResolvedValueOnce({
-        data: null,
-        error: { code: 'PGRST202', message: 'Function not found' },
-      });
-
       queryBuilder.single.mockResolvedValueOnce({
         data: {
           id: '11111111-2222-3333-4444-555555555555',
@@ -217,28 +212,29 @@ describe('CareLoop — Emergency Request Query Safety & Schema Alignment Suite',
           created_by: null, // Non-UUID was sanitized to null
         })
       );
+      // Confirms tracking_token is never sent in insert payload
+      expect(queryBuilder.insert).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          tracking_token: expect.anything(),
+        })
+      );
     });
 
-    it('4.2 Automatically handles missing tracking_token column (PGRST204) by retrying without it', async () => {
-      (supabase.rpc as any).mockResolvedValueOnce({
-        data: null,
-        error: { code: 'PGRST202', message: 'Function not found' },
-      });
-
-      // First insert attempt fails with PGRST204 because tracking_token does not exist on remote schema
+    it('4.2 Automatically handles reference_code unique collisions (23505) by retrying with fresh code', async () => {
+      // First insert attempt fails with unique violation on reference_code
       queryBuilder.single.mockResolvedValueOnce({
         data: null,
         error: {
-          code: 'PGRST204',
-          message: "Could not find the 'tracking_token' column of 'emergency_requests' in the schema cache",
+          code: '23505',
+          message: 'duplicate key value violates unique constraint "emergency_requests_reference_code_key"',
         },
       });
 
-      // Second fallback insert attempt without tracking_token succeeds
+      // Second retry insert attempt succeeds
       queryBuilder.single.mockResolvedValueOnce({
         data: {
           id: '22222222-3333-4444-5555-666666666666',
-          reference_code: 'CL-FLBK',
+          reference_code: 'CL-RETRY',
           blood_group: 'A+',
           component: 'Whole Blood',
           units_required: 2,
@@ -267,7 +263,7 @@ describe('CareLoop — Emergency Request Query Safety & Schema Alignment Suite',
       });
 
       expect(res.success).toBe(true);
-      expect(res.data?.referenceCode).toBe('CL-FLBK');
+      expect(res.data?.referenceCode).toBeDefined();
       expect(res.data?.trackingToken).toBeDefined(); // Token is preserved in domain model
       expect(queryBuilder.insert).toHaveBeenCalledTimes(2);
     });

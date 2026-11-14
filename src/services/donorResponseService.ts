@@ -7,6 +7,7 @@
 
 import { supabase } from './supabaseClient';
 import { Donor, DonorResponse, BloodGroup, BloodComponent } from '../types';
+import { emailValidationService } from './emailValidationService';
 
 export interface AcceptRequestResult {
   success: boolean;
@@ -57,8 +58,11 @@ export function validateDonorOnboardingInput(data: DonorOnboardingInput): { vali
   if (cleanDigits.length < 7 || cleanDigits.length > 15) {
     return { valid: false, error: 'Please enter a valid telephone number (7-15 digits).' };
   }
-  if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) {
-    return { valid: false, error: 'Please enter a valid email address.' };
+  if (data.email) {
+    const emailRes = emailValidationService.validate(data.email);
+    if (!emailRes.valid) {
+      return { valid: false, error: emailRes.error || 'Please enter a valid email address.' };
+    }
   }
   const validBloodGroups: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
   if (!validBloodGroups.includes(data.bloodGroup)) {

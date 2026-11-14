@@ -251,9 +251,15 @@ export const CreateRequestView: React.FC = () => {
         {currentStep === 4 && (
           <StepReview
             {...formData}
-            onEditStep={(step) => setCurrentStep(step)}
+            onEditStep={(step) => {
+              setSubmitError(null);
+              setCurrentStep(step);
+            }}
             onSubmit={handleSubmit}
-            onBack={() => setCurrentStep(3)}
+            onBack={() => {
+              setSubmitError(null);
+              setCurrentStep(3);
+            }}
             isSubmitting={isSubmitting}
             submitError={submitError}
           />

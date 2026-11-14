@@ -70,6 +70,8 @@ export const StepReview: React.FC<StepReviewProps> = ({
     setLocalIsSubmitting(true);
     try {
       await onSubmit();
+    } catch (err) {
+      console.error('[StepReview] Submit caught error:', err);
     } finally {
       setLocalIsSubmitting(false);
     }
