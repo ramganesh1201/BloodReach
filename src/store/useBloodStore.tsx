@@ -927,14 +927,22 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         } catch (err) {
           console.warn('[CareLoop Auth] Profile sync error:', err);
         }
-      } else if (event === 'SIGNED_OUT' || !session) {
+      } else if (event === 'SIGNED_OUT') {
         if (isMounted) {
           setCurrentUser(null);
           setAuthenticatedRole(null);
           localStorage.removeItem('careloop_auth_role');
           localStorage.removeItem('careloop_user_profile');
           sessionStorage.removeItem('careloop_demo_experience');
+          setDemoExperience(null);
           notificationService.cleanup();
+        }
+      } else if (!session) {
+        if (isMounted) {
+          setCurrentUser(null);
+          setAuthenticatedRole(null);
+          localStorage.removeItem('careloop_auth_role');
+          localStorage.removeItem('careloop_user_profile');
         }
       }
     });

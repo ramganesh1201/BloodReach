@@ -1,7 +1,8 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AuthCard } from '../components/common/AuthCard';
-import { Droplet, ArrowLeft, ShieldCheck, Lock, Activity } from 'lucide-react';
+import { useBloodStore } from '../store/useBloodStore';
+import { Droplet, ArrowLeft, ShieldCheck, Lock, Activity, Users, HeartHandshake, Building2, Radio } from 'lucide-react';
 
 interface LoginViewProps {
   initialMode?: 'signin' | 'signup' | 'forgot';
@@ -9,6 +10,8 @@ interface LoginViewProps {
 
 export const LoginView: React.FC<LoginViewProps> = ({ initialMode }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { selectDemoExperience } = useBloodStore();
   const isRegisterPath = location.pathname === '/register';
   const resolvedMode = initialMode || (isRegisterPath ? 'signup' : 'signin');
 
@@ -42,6 +45,67 @@ export const LoginView: React.FC<LoginViewProps> = ({ initialMode }) => {
       {/* Main Authentication Card */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <AuthCard initialMode={resolvedMode} isModal={false} />
+      </div>
+
+      {/* Role Workspace Previews */}
+      <div className="sm:mx-auto sm:w-full sm:max-w-md mt-6 p-4 bg-app-surface border border-app-border rounded-xl shadow-xs text-center space-y-3">
+        <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-app-text">
+          <ShieldCheck className="w-4 h-4 text-brand" />
+          <span>Interactive Role Workspace Previews</span>
+        </div>
+        <p className="text-[11px] text-app-text-secondary leading-tight">
+          Explore CareLoop roles directly in preview mode without signing up:
+        </p>
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <button
+            type="button"
+            data-testid="preview-donor-button"
+            onClick={() => {
+              selectDemoExperience('donor');
+              navigate('/donor');
+            }}
+            className="p-2 text-xs font-semibold rounded-lg bg-brand-light text-brand hover:bg-brand hover:text-white transition-colors border border-brand/20 flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <HeartHandshake className="w-3.5 h-3.5" />
+            <span>Volunteer Donor</span>
+          </button>
+          <button
+            type="button"
+            data-testid="preview-patient-button"
+            onClick={() => {
+              selectDemoExperience('patient');
+              navigate('/patient');
+            }}
+            className="p-2 text-xs font-semibold rounded-lg bg-app-bg text-app-text hover:bg-app-border transition-colors border border-app-border flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Users className="w-3.5 h-3.5 text-brand" />
+            <span>Patient / Attendant</span>
+          </button>
+          <button
+            type="button"
+            data-testid="preview-bloodcentre-button"
+            onClick={() => {
+              selectDemoExperience('blood_centre');
+              navigate('/blood-centre');
+            }}
+            className="p-2 text-xs font-semibold rounded-lg bg-app-bg text-app-text hover:bg-app-border transition-colors border border-app-border flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Building2 className="w-3.5 h-3.5 text-app-text-secondary" />
+            <span>Blood Centre</span>
+          </button>
+          <button
+            type="button"
+            data-testid="preview-coordinator-button"
+            onClick={() => {
+              selectDemoExperience('coordinator');
+              navigate('/coordinator');
+            }}
+            className="p-2 text-xs font-semibold rounded-lg bg-app-bg text-app-text hover:bg-app-border transition-colors border border-app-border flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Radio className="w-3.5 h-3.5 text-warning" />
+            <span>Coordinator Console</span>
+          </button>
+        </div>
       </div>
 
       {/* Trust & Clinical Governance Footer Badges */}
