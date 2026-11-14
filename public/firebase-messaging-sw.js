@@ -14,15 +14,36 @@
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
-// 2. Public Firebase Web App Configuration Placeholders
-// Replace with values from Firebase Console -> Project Settings -> General -> Web Apps
+// 2. Public Firebase Web App Configuration
+// Extracts parameters dynamically from registration URL query string or defaults to placeholders
+let queryApiKey = null;
+let queryAuthDomain = null;
+let queryProjectId = null;
+let queryStorageBucket = null;
+let queryMessagingSenderId = null;
+let queryAppId = null;
+
+try {
+  if (typeof self !== 'undefined' && self.location && self.location.href) {
+    const searchParams = new URL(self.location.href).searchParams;
+    queryApiKey = searchParams.get('apiKey');
+    queryAuthDomain = searchParams.get('authDomain');
+    queryProjectId = searchParams.get('projectId');
+    queryStorageBucket = searchParams.get('storageBucket');
+    queryMessagingSenderId = searchParams.get('messagingSenderId');
+    queryAppId = searchParams.get('appId');
+  }
+} catch (e) {
+  // Fallback to static values
+}
+
 const firebaseConfig = {
-  apiKey: "REPLACE_ME",
-  authDomain: "REPLACE_ME",
-  projectId: "REPLACE_ME",
-  storageBucket: "REPLACE_ME",
-  messagingSenderId: "REPLACE_ME",
-  appId: "REPLACE_ME",
+  apiKey: queryApiKey || "REPLACE_ME",
+  authDomain: queryAuthDomain || "REPLACE_ME",
+  projectId: queryProjectId || "REPLACE_ME",
+  storageBucket: queryStorageBucket || "REPLACE_ME",
+  messagingSenderId: queryMessagingSenderId || "REPLACE_ME",
+  appId: queryAppId || "REPLACE_ME",
 };
 
 // 3. Safe Firebase Initialization

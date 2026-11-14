@@ -258,7 +258,19 @@ class FcmService {
       let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
       if ('serviceWorker' in navigator) {
         try {
-          serviceWorkerRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+          const cfg = this.getConfig();
+          const query = new URLSearchParams();
+          if (cfg.apiKey && cfg.apiKey !== 'REPLACE_ME') query.set('apiKey', cfg.apiKey);
+          if (cfg.authDomain && cfg.authDomain !== 'REPLACE_ME') query.set('authDomain', cfg.authDomain);
+          if (cfg.projectId && cfg.projectId !== 'REPLACE_ME') query.set('projectId', cfg.projectId);
+          if (cfg.storageBucket && cfg.storageBucket !== 'REPLACE_ME') query.set('storageBucket', cfg.storageBucket);
+          if (cfg.messagingSenderId && cfg.messagingSenderId !== 'REPLACE_ME') query.set('messagingSenderId', cfg.messagingSenderId);
+          if (cfg.appId && cfg.appId !== 'REPLACE_ME') query.set('appId', cfg.appId);
+
+          const queryString = query.toString();
+          const swUrl = queryString ? `/firebase-messaging-sw.js?${queryString}` : '/firebase-messaging-sw.js';
+
+          serviceWorkerRegistration = await navigator.serviceWorker.register(swUrl, {
             scope: '/',
           });
           await navigator.serviceWorker.ready;
