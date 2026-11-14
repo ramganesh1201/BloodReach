@@ -952,35 +952,38 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const refreshRequests = useCallback(async () => {
     if (dataSource !== 'database' || !isSupabaseConfigured) return;
     try {
-      if (currentUser?.id) {
-        if (currentRole === 'donor') {
-          const res = await donorDiscoveryService.getDiscoverableRequests({
-            bloodGroup: currentUser.bloodGroup,
-            city: currentUser.city,
-          });
-          if (res.error) {
-            setBackendError(res.error);
-          } else if (res.data) {
-            setRequests((prev) => {
-              const ids = new Set(res.data!.map((m) => m.id));
-              const retained = prev.filter((p) => !ids.has(p.id));
-              return [...res.data!, ...retained];
-            });
-          }
-        } else if (['coordinator', 'admin', 'blood_centre'].includes(currentRole)) {
-          const res = await emergencyRequestService.getAllEmergencyRequests();
-          if (res.error) {
-            setBackendError(res.error);
-          } else if (res.data) {
-            setRequests(res.data);
-          }
+      if (['coordinator', 'admin', 'blood_centre'].includes(currentRole)) {
+        const res = await emergencyRequestService.getAllEmergencyRequests();
+        if (res.error) {
+          setBackendError(res.error);
+        } else if (res.data) {
+          setRequests(res.data);
+        }
+      } else if (currentUser?.id) {
+        // One Account, Dual Capabilities:
+        // Fetch both the patient's own requests AND discoverable open requests for volunteer donor capability
+        const [myRes, discRes] = await Promise.all([
+          emergencyRequestService.getMyEmergencyRequests(currentUser.id),
+          donorDiscoveryService.getDiscoverableRequests(),
+        ]);
+
+        if (myRes.error && discRes.error) {
+          setBackendError(myRes.error || discRes.error);
         } else {
-          const res = await emergencyRequestService.getMyEmergencyRequests(currentUser.id);
-          if (res.error) {
-            setBackendError(res.error);
-          } else if (res.data) {
-            setRequests(res.data);
+          const combined = new Map<string, EmergencyRequest>();
+          if (discRes.data) {
+            discRes.data.forEach((r) => combined.set(r.id, r));
           }
+          if (myRes.data) {
+            myRes.data.forEach((r) => combined.set(r.id, r));
+          }
+          setRequests(Array.from(combined.values()));
+        }
+      } else {
+        // Guest user browsing or viewing discoverable emergency requests
+        const discRes = await donorDiscoveryService.getDiscoverableRequests();
+        if (discRes.data) {
+          setRequests(discRes.data);
         }
       }
     } catch (err: any) {
@@ -1028,6 +1031,35 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       refreshInventory();
     }
   }, [currentUser?.id, dataSource, refreshRequests, refreshConversations, refreshInventory]);
+
+  // Realtime Emergency Requests Synchronization & Focus Auto-Refresh
+  useEffect(() => {
+    if (dataSource !== 'database' || !isSupabaseConfigured) return;
+
+    // Fetch initial discoverable requests
+    refreshRequests();
+
+    const channel = supabase
+      .channel('careloop-emergency-requests-live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'emergency_requests' },
+        () => {
+          refreshRequests();
+        }
+      )
+      .subscribe();
+
+    const handleFocus = () => {
+      refreshRequests();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      channel.unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [dataSource, refreshRequests]);
 
   // Realtime Inventory Synchronization
   useEffect(() => {
@@ -1431,6 +1463,21 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       sessionStorage.removeItem('careloop_demo_experience');
       notificationService.initUserSession(authData.user.id);
 
+      // Authoritatively hydrate donor registration profile for this account
+      try {
+        const donorRes = await donorResponseService.getDonorProfileByUserId(authData.user.id);
+        if (donorRes.success && donorRes.data) {
+          const userDonor = donorRes.data;
+          setDonors((prev) => [userDonor, ...prev.filter((d) => d.profileId !== authData.user.id)]);
+          localStorage.setItem(`careloop_donor_profile_${authData.user.id}`, JSON.stringify(userDonor));
+        }
+      } catch (dErr) {
+        console.warn('[CareLoop Auth] Donor profile hydration failed:', dErr);
+      }
+
+      // Synchronize latest requests
+      refreshRequests();
+
       notificationService.sendInAppNotification({
         title: 'Authentication Successful',
         content: `Signed in as ${verifiedProfile.fullName} (${resolvedRole.toUpperCase()}).`,
@@ -1826,24 +1873,23 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       'Patient Attendant'
     );
 
-    // Non-blocking Web Push notification trigger to clinically matched donors
+    // Non-blocking Web Push & server matching notification trigger to clinically matched donors
     try {
       const candidateMatches = findPotentialResponders(created, donors);
       const matchedUserIds = candidateMatches
         .map((m) => m.donor.profileId || m.donor.id)
         .filter((id): id is string => Boolean(id));
 
-      if (matchedUserIds.length > 0) {
-        fcmService.dispatchPushToMatchedDonors({
-          requestId: created.id,
-          referenceCode: created.referenceCode,
-          bloodGroup: created.bloodGroup,
-          component: created.component,
-          hospitalName: created.hospitalName,
-          city: created.city,
-          recipientUserIds: matchedUserIds,
-        }).catch(() => {});
-      }
+      fcmService.dispatchPushToMatchedDonors({
+        requestId: created.id,
+        referenceCode: created.referenceCode,
+        bloodGroup: created.bloodGroup,
+        component: created.component,
+        hospitalName: created.hospitalName,
+        city: created.city,
+        recipientUserIds: matchedUserIds.length > 0 ? matchedUserIds : undefined,
+        trackingToken: created.trackingToken,
+      }).catch(() => {});
     } catch {
       // Non-blocking: push alert failure never prevents request creation or local store update
     }

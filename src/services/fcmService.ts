@@ -439,7 +439,7 @@ class FcmService {
   }
 
   /**
-   * Invokes backend Supabase Edge Function to dispatch push alerts to matched donor users
+   * Invokes backend Supabase Edge Function and Vercel serverless pipeline to match donors and dispatch alerts
    * Non-blocking: failures or unconfigured state do not throw or impede core clinical workflows.
    */
   public async dispatchPushToMatchedDonors(options: {
@@ -449,10 +449,27 @@ class FcmService {
     component: string;
     hospitalName: string;
     city: string;
-    recipientUserIds: string[];
+    recipientUserIds?: string[];
+    trackingToken?: string;
   }): Promise<{ success: boolean; status?: string; error?: string }> {
-    if (!options.recipientUserIds || options.recipientUserIds.length === 0) {
+    if (options.recipientUserIds && options.recipientUserIds.length === 0) {
       return { success: true, status: 'NO_RECIPIENTS' };
+    }
+
+    // 1. Trigger serverless matching and notification endpoint (production runtime)
+    if (typeof window !== 'undefined' && typeof fetch === 'function' && process.env.NODE_ENV !== 'test') {
+      try {
+        fetch('/api/match-and-notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestId: options.requestId,
+            trackingToken: options.trackingToken,
+          }),
+        }).catch(() => {});
+      } catch {
+        // Non-blocking
+      }
     }
 
     if (!isSupabaseConfigured) {
@@ -470,7 +487,7 @@ class FcmService {
         headers: authHeader ? { Authorization: authHeader } : {},
         body: {
           requestId: options.requestId,
-          recipientUserIds: options.recipientUserIds,
+          recipientUserIds: options.recipientUserIds || [],
           title: `CareLoop Emergency Alert: ${options.bloodGroup} Needed`,
           body: `Urgent need for ${options.bloodGroup} (${options.component}) at ${options.hospitalName}, ${options.city}. Ref: ${options.referenceCode}.`,
           clickUrl: '/donor',
@@ -485,7 +502,7 @@ class FcmService {
       return { success: true, status: data?.status || 'DISPATCHED' };
     } catch (err: any) {
       console.warn('[FcmService] Push dispatch non-blocking exception:', err);
-      return { success: false, error: err.message };
+      return { success: false, error: err?.message || 'Failed push dispatch.' };
     }
   }
 }

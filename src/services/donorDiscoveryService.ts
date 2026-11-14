@@ -30,6 +30,47 @@ export interface DiscoverableRequestFilters {
 export async function getDiscoverableRequests(
   filters?: DiscoverableRequestFilters
 ): Promise<{ success: boolean; data?: EmergencyRequest[]; error?: string }> {
+  // 1. Authoritative SECURITY DEFINER RPC
+  try {
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_discoverable_emergency_requests', {
+      p_blood_group: filters?.bloodGroup || null,
+      p_city: filters?.city || null,
+    });
+
+    if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+      return { success: true, data: rpcData.map(mapDbToEmergencyRequest) };
+    }
+  } catch {
+    // Fall through to serverless / view fallback
+  }
+
+  // 2. Vercel Serverless Privacy Endpoint (/api/discover-requests)
+  if (typeof window !== 'undefined' && typeof fetch === 'function' && process.env.NODE_ENV !== 'test') {
+    try {
+      const apiRes = await fetch('/api/discover-requests', {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (apiRes.ok) {
+        const json = await apiRes.json();
+        if (json.success && Array.isArray(json.data)) {
+          let rows = json.data;
+          if (filters?.bloodGroup) {
+            rows = rows.filter((r: any) => r.blood_group === filters.bloodGroup);
+          }
+          if (filters?.city && filters.city.trim().length > 0) {
+            const cLower = filters.city.trim().toLowerCase();
+            rows = rows.filter((r: any) => (r.city || '').toLowerCase().includes(cLower));
+          }
+          return { success: true, data: rows.map(mapDbToEmergencyRequest) };
+        }
+      }
+    } catch {
+      // Fall through to view query
+    }
+  }
+
+  // 3. Fallback to discoverable_emergency_requests view
   try {
     let query = supabase
       .from('discoverable_emergency_requests')

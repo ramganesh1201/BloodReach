@@ -77,6 +77,7 @@ export const DonorView: React.FC = () => {
   const {
     donors,
     requests,
+    refreshRequests,
     donorResponses,
     donorAssignments,
     conversations,
@@ -108,6 +109,16 @@ export const DonorView: React.FC = () => {
     setActiveTab(newTab);
     setSearchParams({ tab: newTab }, { replace: true });
   };
+
+  // Authoritative live request synchronization on mount and tab focus
+  useEffect(() => {
+    refreshRequests();
+    const handleFocus = () => {
+      refreshRequests();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [refreshRequests]);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
@@ -369,7 +380,7 @@ export const DonorView: React.FC = () => {
       const distanceMatch =
         ((r as any).distanceKm !== undefined && (r as any).distanceKm <= 50) ||
         (activeDonor.approxDistanceKm !== undefined && activeDonor.approxDistanceKm <= 50);
-      if (!cityMatch && !districtMatch && !distanceMatch) {
+      if (!cityMatch && !districtMatch && !distanceMatch && r.district && activeDonor.district) {
         return false;
       }
     }
