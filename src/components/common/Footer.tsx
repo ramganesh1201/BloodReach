@@ -1,8 +1,14 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ShieldCheck, MessageSquare, PhoneCall, Building2, ExternalLink, Activity } from 'lucide-react';
 
 export const Footer: React.FC = () => {
+  const location = useLocation();
+
+  // Suppress static footer in the dedicated real-time communication workspace
+  if (location.pathname.startsWith('/communication')) {
+    return null;
+  }
   return (
     <footer className="bg-slate-950 text-slate-400 text-xs py-12 border-t border-slate-800 pb-24 md:pb-12" role="contentinfo">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

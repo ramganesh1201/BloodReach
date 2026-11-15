@@ -1100,11 +1100,38 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     let isMounted = true;
     conversationService.getConversationMessages(activeConversationId).then((res) => {
-      if (isMounted && res.success && res.data && res.data.length > 0) {
-        setChatMessages((prev) => ({
-          ...prev,
-          [activeConversationId]: res.data!,
-        }));
+      if (isMounted && res.success && res.data) {
+        setChatMessages((prev) => {
+          const existing = prev[activeConversationId] || [];
+          const serverMessages = res.data || [];
+
+          if (existing.length === 0) {
+            return {
+              ...prev,
+              [activeConversationId]: serverMessages,
+            };
+          }
+
+          // Stable deduplication & reconciliation:
+          // Keep server messages as authoritative, and preserve only in-flight optimistic messages
+          const serverIds = new Set(serverMessages.map((m) => m.id));
+          const serverClientIds = new Set(
+            serverMessages.map((m) => m.clientMessageId).filter(Boolean) as string[]
+          );
+
+          const inFlightOptimistic = existing.filter(
+            (m) =>
+              !serverIds.has(m.id) &&
+              !(m.clientMessageId && serverClientIds.has(m.clientMessageId)) &&
+              !serverClientIds.has(m.id) &&
+              (m.deliveryStatus === 'SENDING' || m.deliveryStatus === 'PENDING_SYNC')
+          );
+
+          return {
+            ...prev,
+            [activeConversationId]: [...serverMessages, ...inFlightOptimistic],
+          };
+        });
       }
     });
 
@@ -1112,15 +1139,26 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (!isMounted) return;
       setChatMessages((prev) => {
         const existing = prev[activeConversationId] || [];
-        if (
-          existing.some(
-            (m) =>
-              m.id === incomingMsg.id ||
-              (incomingMsg.clientMessageId && m.clientMessageId === incomingMsg.clientMessageId)
-          )
-        ) {
-          return prev;
+
+        // Deduplication & In-place Reconciliation:
+        // Check if an existing message matches by server ID or clientMessageId
+        const matchIdx = existing.findIndex(
+          (m) =>
+            m.id === incomingMsg.id ||
+            (incomingMsg.clientMessageId &&
+              (m.clientMessageId === incomingMsg.clientMessageId || m.id === incomingMsg.clientMessageId))
+        );
+
+        if (matchIdx !== -1) {
+          // Replace the optimistic message with the server-persisted message
+          const updated = [...existing];
+          updated[matchIdx] = incomingMsg;
+          return {
+            ...prev,
+            [activeConversationId]: updated,
+          };
         }
+
         return {
           ...prev,
           [activeConversationId]: [...existing, incomingMsg],
@@ -2524,6 +2562,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       senderRole,
       messageType,
       content,
+      clientMessageId: messageId,
       attachment: attachments && attachments[0] ? attachments[0] : undefined,
       timestamp: nowIso,
       deliveryStatus: initialStatus,
@@ -2576,7 +2615,15 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             const list = prev[conversationId] || [];
             return {
               ...prev,
-              [conversationId]: list.map((m) => (m.id === messageId ? { ...m, deliveryStatus: 'DELIVERED' } : m)),
+              [conversationId]: list.map((m) =>
+                m.id === messageId || m.clientMessageId === messageId
+                  ? {
+                      ...m,
+                      id: dbRes.data?.id || m.id,
+                      deliveryStatus: 'DELIVERED',
+                    }
+                  : m
+              ),
             };
           });
         } else {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { BeforeAcceptanceTracker } from '../components/communication/BeforeAcceptanceTracker';
@@ -15,8 +15,18 @@ import {
   Radio,
   Sparkles,
   Info,
+  ArrowLeft,
+  Activity,
+  Droplet,
 } from 'lucide-react';
 import { CoordinationEventType, MessageAttachment } from '../types';
+
+function getInitials(name?: string, fallback = 'CL'): string {
+  if (!name || name.trim().length === 0) return fallback;
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 export const CommunicationView: React.FC = () => {
   const navigate = useNavigate();
@@ -47,21 +57,22 @@ export const CommunicationView: React.FC = () => {
   const urlRequestId = searchParams.get('requestId') || (location.state as any)?.requestId || null;
 
   const [selectedRequestId, setSelectedRequestId] = useState<string>(() => urlRequestId || requests[0]?.id || '');
-  const [mobileTab, setMobileTab] = useState<'sidebar' | 'chat' | 'context'>('chat');
+  // Mobile dedicated view mode: 'list' (channel directory) | 'chat' (full-screen thread) | 'context' (clinical drawer)
+  const [mobileView, setMobileView] = useState<'list' | 'chat' | 'context'>('chat');
 
-  // User-scoped conversations
+  // User-scoped conversations filtered strictly by authorization
   const userConversations = getConversationsForUser();
 
-  // If conversationId is specified in URL but not yet present in store, trigger refresh
+  // If conversationId is specified in URL but not yet loaded, trigger background refresh
   useEffect(() => {
     if (urlConversationId && !userConversations.some((c) => c.id === urlConversationId)) {
       if (typeof refreshConversations === 'function') {
         refreshConversations();
       }
     }
-  }, [urlConversationId]);
+  }, [urlConversationId, userConversations, refreshConversations]);
 
-  // Synchronize activeConversationId with URL query params or fallback to first conversation
+  // Synchronize activeConversationId with URL query params or fallback to first permitted conversation
   useEffect(() => {
     if (urlConversationId) {
       if (activeConversationId !== urlConversationId) {
@@ -125,6 +136,21 @@ export const CommunicationView: React.FC = () => {
     }
   }, [activeConversationId, markConversationAsRead]);
 
+  // Participant Identity Derivation:
+  // Patient views Donor's actual name; Donor views Requester's actual name. Never own name.
+  const isUserDonor = currentRole === 'donor' || (Boolean(currentUser?.id) && activeConversation?.donorId === currentUser?.id);
+  const activeOtherPartyName = activeConversation
+    ? isUserDonor
+      ? (activeConversation.requesterName || 'Emergency Attendant')
+      : (activeConversation.donorName || 'Volunteer Donor')
+    : 'Emergency Responder';
+  const activeOtherPartyInitials = getInitials(activeOtherPartyName, isUserDonor ? 'PA' : 'VD');
+  const activeOtherPartySubtitle = activeConversation
+    ? isUserDonor
+      ? `Patient Attendant • Request #${activeConversation.referenceCode || 'Direct'}`
+      : `Volunteer Donor (${activeConversation.donorBloodGroup || '—'}) • Request #${activeConversation.referenceCode || 'Direct'}`
+    : 'Direct Coordination Channel';
+
   // Handle simulating a donor acceptance from the BeforeAcceptance tracker
   const handleSimulateAcceptance = async (donorId: string) => {
     if (!activeRequest) return;
@@ -132,7 +158,7 @@ export const CommunicationView: React.FC = () => {
     if (res.success && res.conversationId) {
       setActiveConversationId(res.conversationId);
       navigate(`/communication?conversationId=${res.conversationId}`, { replace: true });
-      setMobileTab('chat');
+      setMobileView('chat');
     }
   };
 
@@ -167,25 +193,26 @@ export const CommunicationView: React.FC = () => {
   );
 
   return (
-    <div className="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8 space-y-4 sm:space-y-6 animate-fade-in min-h-[calc(100vh-5rem)] flex flex-col">
-      {/* Header Bar with Request Selector */}
-      <div className="bg-app-surface rounded-xl border border-app-border p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-subtle shrink-0">
+    <div className="max-w-7xl mx-auto py-3 sm:py-6 px-3 sm:px-6 lg:px-8 space-y-3 sm:space-y-4 animate-fade-in min-h-[calc(100dvh-4rem)] flex flex-col">
+      {/* Top Clinical Header Bar with Request Selector */}
+      <div className="bg-white rounded-xl border border-[#E6E9E7] p-3.5 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-brand-light text-brand flex items-center justify-center font-bold shrink-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-brand-light text-brand flex items-center justify-center font-bold shrink-0">
             <MessageSquare className="w-5 h-5" />
           </div>
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-bold text-app-text tracking-tight font-display">
-                Emergency Communication Hub
+              <h1 className="text-base sm:text-lg font-bold text-[#202322] tracking-tight font-display">
+                CareLoop Connect — Emergency Communication Hub
               </h1>
-              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-success-light text-success border border-success-border">
-                <ShieldCheck className="w-3 h-3" />
-                <span>End-to-End Relay</span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                <span className="hidden xs:inline">Protected Clinical Channel</span>
+                <span className="xs:hidden">Protected</span>
               </span>
             </div>
-            <p className="text-xs text-app-text-secondary leading-relaxed">
-              Private 1-on-1 channels activated exclusively between hospital attendants and verified responders.
+            <p className="text-xs text-[#69716F] leading-tight">
+              Direct, request-linked 1-on-1 channels activated between attending patients and verified blood donors.
             </p>
           </div>
         </div>
@@ -193,9 +220,9 @@ export const CommunicationView: React.FC = () => {
         {/* Request Selector & View Mode Switcher */}
         {requests.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 bg-app-muted/60 border border-app-border rounded-lg p-1">
-              <span className="text-[11px] font-semibold text-app-text-secondary px-2">Request:</span>
-              {requests.map((r) => (
+            <div className="flex items-center gap-1.5 bg-[#F8F9F8] border border-[#E6E9E7] rounded-lg p-1">
+              <span className="text-[11px] font-bold text-[#69716F] px-1.5">Request:</span>
+              {requests.slice(0, 4).map((r) => (
                 <button
                   key={r.id}
                   type="button"
@@ -207,10 +234,10 @@ export const CommunicationView: React.FC = () => {
                       navigate(`/communication?conversationId=${conv.id}`, { replace: true });
                     }
                   }}
-                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                  className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${
                     selectedRequestId === r.id
-                      ? 'bg-app-surface text-app-text shadow-xs border border-app-border'
-                      : 'text-app-text-secondary hover:text-app-text'
+                      ? 'bg-white text-[#202322] shadow-xs border border-[#E6E9E7]'
+                      : 'text-[#69716F] hover:text-[#202322]'
                   }`}
                 >
                   #{r.referenceCode || 'REQ'} ({r.bloodGroup || '—'})
@@ -246,49 +273,12 @@ export const CommunicationView: React.FC = () => {
           }}
         />
       ) : userConversations.length > 0 ? (
-        <div className="flex-1 bg-app-surface rounded-xl border border-app-border shadow-subtle overflow-hidden flex flex-col min-h-[640px]">
-          {/* Mobile Tab Switcher */}
-          <div className="md:hidden flex items-center justify-around border-b border-app-border bg-app-muted/40 p-1.5 text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => setMobileTab('sidebar')}
-              className={`flex-1 py-1.5 rounded-md text-center transition-colors ${
-                mobileTab === 'sidebar'
-                  ? 'bg-app-surface text-app-text shadow-xs font-bold'
-                  : 'text-app-text-secondary font-medium'
-              }`}
-            >
-              Conversations ({userConversations.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileTab('chat')}
-              className={`flex-1 py-1.5 rounded-md text-center transition-colors ${
-                mobileTab === 'chat'
-                  ? 'bg-app-surface text-app-text shadow-xs font-bold'
-                  : 'text-app-text-secondary font-medium'
-              }`}
-            >
-              Live Chat
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileTab('context')}
-              className={`flex-1 py-1.5 rounded-md text-center transition-colors ${
-                mobileTab === 'context'
-                  ? 'bg-app-surface text-app-text shadow-xs font-bold'
-                  : 'text-app-text-secondary font-medium'
-              }`}
-            >
-              Details
-            </button>
-          </div>
-
+        <div className="flex-1 bg-white rounded-xl border border-[#E6E9E7] shadow-xs overflow-hidden flex flex-col min-h-[580px]">
           <div className="flex-1 grid grid-cols-1 md:grid-cols-12 min-h-0 overflow-hidden">
-            {/* Left Pane: Conversation Sidebar */}
+            {/* Left Pane: Conversation Directory Sidebar */}
             <div
               className={`md:col-span-4 lg:col-span-3 h-full overflow-hidden ${
-                mobileTab === 'sidebar' ? 'block' : 'hidden md:block'
+                mobileView === 'list' ? 'block' : 'hidden md:block'
               }`}
             >
               <ConversationSidebar
@@ -297,48 +287,72 @@ export const CommunicationView: React.FC = () => {
                 onSelectConversation={(id) => {
                   setActiveConversationId(id);
                   navigate(`/communication?conversationId=${id}`, { replace: true });
-                  setMobileTab('chat');
+                  setMobileView('chat');
                 }}
                 currentRole={currentRole}
+                currentUserId={currentUser?.id}
               />
             </div>
 
-            {/* Middle Pane: Main Chat Stream & Composer */}
+            {/* Middle Pane: Focused Chat Thread & Composer */}
             <div
-              className={`md:col-span-8 lg:col-span-6 h-full flex flex-col border-r border-app-border overflow-hidden ${
-                mobileTab === 'chat' ? 'flex' : 'hidden md:flex'
+              className={`md:col-span-8 lg:col-span-6 h-full flex flex-col border-r border-[#E6E9E7] overflow-hidden ${
+                mobileView === 'chat' ? 'flex' : 'hidden md:flex'
               }`}
             >
               {activeConversation ? (
                 <>
                   {/* Chat Header */}
-                  <div className="p-3.5 border-b border-app-border bg-app-surface flex items-center justify-between gap-3 shrink-0">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-brand-light text-brand font-bold flex items-center justify-center text-sm border border-brand/20 shrink-0 font-display">
-                        {activeConversation.donorBloodGroup || '—'}
+                  <div className="p-3 sm:p-3.5 border-b border-[#E6E9E7] bg-white flex items-center justify-between gap-3 shrink-0">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {/* Mobile Back Button: Returns to Channel Directory */}
+                      <button
+                        type="button"
+                        onClick={() => setMobileView('list')}
+                        className="md:hidden p-1.5 rounded-lg border border-[#E6E9E7] text-[#202322] hover:bg-[#F8F9F8] transition-colors shrink-0"
+                        aria-label="Back to channels"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                      </button>
+
+                      {/* Participant Initials Avatar */}
+                      <div className="relative shrink-0">
+                        <div
+                          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full font-bold flex items-center justify-center text-xs tracking-wider border shadow-xs ${
+                            isUserDonor
+                              ? 'bg-slate-100 text-slate-700 border-slate-200'
+                              : 'bg-brand-light text-brand border-brand/20'
+                          }`}
+                        >
+                          {isUserDonor ? activeOtherPartyInitials : activeConversation.donorBloodGroup || activeOtherPartyInitials}
+                        </div>
+                        <span
+                          className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center"
+                          title="Active private channel"
+                        >
+                          <span className="w-1 h-1 rounded-full bg-white animate-pulse" />
+                        </span>
                       </div>
+
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h2 className="text-sm font-bold text-app-text truncate">
-                            {currentRole === 'donor'
-                              ? (activeConversation.requesterName || 'Emergency Attendant')
-                              : (activeConversation.donorName || 'Responder')}
+                        <div className="flex items-center gap-1.5">
+                          <h2 className="text-xs sm:text-sm font-bold text-[#202322] truncate">
+                            {activeOtherPartyName}
                           </h2>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-success bg-success-light px-2 py-0.5 rounded-full border border-success-border shrink-0">
-                            <Radio className="w-2.5 h-2.5 text-success animate-pulse" />
-                            <span>Active Channel</span>
+                          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                            <Radio className="w-2.5 h-2.5 text-emerald-600 animate-pulse" />
+                            <span>Connected</span>
                           </span>
                         </div>
-                        <p className="text-[11px] text-app-text-secondary truncate">
-                          {activeConversation.referenceCode
-                            ? `Request #${activeConversation.referenceCode}`
-                            : 'Direct Coordination Channel'}
+                        <p className="text-[11px] text-[#69716F] truncate">
+                          {activeOtherPartySubtitle}
                           {activeConversation.hospitalName ? ` • ${activeConversation.hospitalName}` : ''}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    {/* Action Buttons: Voice Call & Mobile Context Drawer */}
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={handleStartCall}
@@ -350,8 +364,8 @@ export const CommunicationView: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => setMobileTab('context')}
-                        className="md:hidden p-2 rounded-lg border border-app-border text-app-text-secondary hover:bg-app-muted"
+                        onClick={() => setMobileView('context')}
+                        className="lg:hidden p-2 rounded-lg border border-[#E6E9E7] text-[#69716F] hover:bg-[#F8F9F8] transition-colors"
                         aria-label="Toggle details view"
                       >
                         <Info className="w-4 h-4" />
@@ -359,18 +373,19 @@ export const CommunicationView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Structured Coordination Action Bar */}
+                  {/* Structured Coordination Milestone Action Bar */}
                   <CoordinationActionPanel
                     currentRole={currentRole}
                     onSubmitMilestone={handleSubmitMilestone}
                     hospitalName={activeConversation.hospitalName}
                   />
 
-                  {/* Message Timeline */}
+                  {/* Message Timeline with Deduplication & Date Separators */}
                   <ChatTimeline
                     messages={activeMessages}
                     currentUserId={currentUser?.id}
                     currentRole={currentRole}
+                    isReconnecting={isOffline}
                   />
 
                   {/* Message Composer */}
@@ -380,26 +395,34 @@ export const CommunicationView: React.FC = () => {
                   />
                 </>
               ) : (
-                <div className="flex-1 flex items-center justify-center p-8 text-center bg-app-muted/30">
+                <div className="flex-1 flex items-center justify-center p-8 text-center bg-[#F8F9F8]">
                   <div className="space-y-3 max-w-sm">
-                    <div className="w-12 h-12 rounded-xl bg-app-surface border border-app-border text-brand flex items-center justify-center mx-auto shadow-xs">
+                    <div className="w-12 h-12 rounded-xl bg-white border border-[#E6E9E7] text-brand flex items-center justify-center mx-auto shadow-xs">
                       <MessageSquare className="w-6 h-6" />
                     </div>
-                    <h3 className="text-sm font-bold text-app-text font-display">
-                      No Conversation Selected
+                    <h3 className="text-sm font-bold text-[#202322] font-display">
+                      No Channel Selected
                     </h3>
-                    <p className="text-xs text-app-text-secondary leading-relaxed">
+                    <p className="text-xs text-[#69716F] leading-relaxed">
                       Choose an accepted responder from the directory on the left to coordinate dispatch.
                     </p>
+                    <button
+                      type="button"
+                      onClick={() => setMobileView('list')}
+                      className="md:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand text-white hover:bg-brand-hover shadow-xs"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Open Channels</span>
+                    </button>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Right Pane: Context & Facility Guidelines */}
+            {/* Right Pane: Clinical Context & Transfusion Guidelines */}
             <div
               className={`lg:col-span-3 h-full overflow-hidden ${
-                mobileTab === 'context' ? 'block' : 'hidden lg:block'
+                mobileView === 'context' ? 'block' : 'hidden lg:block'
               }`}
             >
               {activeConversation ? (
@@ -407,9 +430,10 @@ export const CommunicationView: React.FC = () => {
                   conversation={activeConversation}
                   currentRole={currentRole}
                   onInitiateCall={handleStartCall}
+                  onBackToChat={() => setMobileView('chat')}
                 />
               ) : (
-                <div className="p-6 text-center text-xs text-app-text-secondary">
+                <div className="p-6 text-center text-xs text-[#69716F]">
                   Select an active conversation to inspect request parameters.
                 </div>
               )}
