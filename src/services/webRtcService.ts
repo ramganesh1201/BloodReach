@@ -40,6 +40,39 @@ export const DEFAULT_STUN_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun2.l.google.com:19302' },
 ];
 
+/**
+ * Resolves default ICE servers combining standard Google STUN with optional
+ * environment-injected TURN relays (VITE_TURN_SERVER_URLS, VITE_TURN_USERNAME, VITE_TURN_CREDENTIAL)
+ */
+export function getEnvironmentIceServers(): RTCIceServer[] {
+  const servers: RTCIceServer[] = [...DEFAULT_STUN_SERVERS];
+
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      const turnUrls = import.meta.env.VITE_TURN_SERVER_URLS || import.meta.env.VITE_TURN_URL;
+      const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+      const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL || import.meta.env.VITE_TURN_PASSWORD;
+
+      if (turnUrls) {
+        const urls = turnUrls
+          .split(',')
+          .map((u: string) => u.trim())
+          .filter(Boolean);
+        if (urls.length > 0) {
+          const turnServer: RTCIceServer = { urls };
+          if (turnUsername) turnServer.username = turnUsername;
+          if (turnCredential) turnServer.credential = turnCredential;
+          servers.unshift(turnServer);
+        }
+      }
+    }
+  } catch {
+    // Non-Vite test runner context fallback
+  }
+
+  return servers;
+}
+
 export interface WebRtcCallStats {
   timestamp: number;
   connectionState: RTCPeerConnectionState;
@@ -76,7 +109,7 @@ export class WebRtcVoiceEngine {
   private remoteStream: MediaStream | null = null;
   private remoteAudioElement: HTMLAudioElement | null = null;
   private isMuted: boolean = false;
-  private iceServers: RTCIceServer[] = DEFAULT_STUN_SERVERS;
+  private iceServers: RTCIceServer[] = getEnvironmentIceServers();
 
   // Candidate queue for candidates arriving before remote description
   private pendingCandidates: RTCIceCandidateInit[] = [];
@@ -121,7 +154,7 @@ export class WebRtcVoiceEngine {
    * Reset ICE servers back to default STUN configuration
    */
   resetIceServers(): void {
-    this.iceServers = [...DEFAULT_STUN_SERVERS];
+    this.iceServers = getEnvironmentIceServers();
   }
 
   /**

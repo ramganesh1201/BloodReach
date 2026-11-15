@@ -256,7 +256,12 @@ export const DonorView: React.FC = () => {
 
       if (status === 'ACCEPTED') {
         if (res.success) {
-          navigate('/communication');
+          const targetUrl =
+            res.conversationRoute ||
+            (res.conversationId ? `/communication?conversationId=${res.conversationId}` : '/communication');
+          navigate(targetUrl, {
+            state: { conversationId: res.conversationId, requestId },
+          });
         } else {
           setCardErrors((prev) => ({
             ...prev,

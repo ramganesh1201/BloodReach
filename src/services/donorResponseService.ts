@@ -13,6 +13,8 @@ export interface AcceptRequestResult {
   success: boolean;
   conversationId?: string;
   requestId?: string;
+  assignmentId?: string;
+  conversationRoute?: string;
   donorName?: string;
   alreadyAccepted?: boolean;
   error?: string;
@@ -245,6 +247,10 @@ export async function acceptRequestAndCreateConversation(
               success: true,
               conversationId: apiData.conversationId,
               requestId: apiData.requestId,
+              assignmentId: apiData.assignmentId,
+              conversationRoute:
+                apiData.conversationRoute ||
+                (apiData.conversationId ? `/communication?conversationId=${apiData.conversationId}` : '/communication'),
               donorName: apiData.donorName,
               alreadyAccepted: Boolean(apiData.alreadyAccepted),
             };
@@ -296,10 +302,12 @@ export async function acceptRequestAndCreateConversation(
       };
     }
 
+    const conversationId = result.conversation_id;
     return {
       success: true,
-      conversationId: result.conversation_id,
+      conversationId,
       requestId: result.request_id,
+      conversationRoute: conversationId ? `/communication?conversationId=${conversationId}` : '/communication',
       donorName: result.donor_name,
       alreadyAccepted: Boolean(result.already_accepted),
     };

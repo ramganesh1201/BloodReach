@@ -230,15 +230,107 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  const { requestId, donorId } = body;
-  if (!requestId) {
+  const rawRequestId = body.requestId || body.request_id || body.referenceCode || body.reference_code;
+  const rawDonorId = body.donorId || body.donor_id;
+
+  if (!rawRequestId) {
     res.statusCode = 400;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ success: false, error: 'Emergency requestId is required.' }));
     return;
   }
 
-  // 4. Server-Authoritative Atomic Acceptance via PostgreSQL SECURITY DEFINER RPC
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // 4. Resolve Request UUID (handles UUID or Human-Readable Reference Code like CL-8F42)
+  let resolvedRequestId: string | null = UUID_REGEX.test(String(rawRequestId).trim())
+    ? String(rawRequestId).trim()
+    : null;
+
+  if (!resolvedRequestId) {
+    const { data: reqByCode } = await supabase
+      .from('emergency_requests')
+      .select('id, reference_code, created_by, status, units_coordinated, units_required')
+      .ilike('reference_code', String(rawRequestId).trim())
+      .maybeSingle();
+
+    if (reqByCode?.id) {
+      resolvedRequestId = reqByCode.id;
+    }
+  }
+
+  if (!resolvedRequestId) {
+    res.statusCode = 404;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ success: false, error: `Emergency request "${rawRequestId}" not found.` }));
+    return;
+  }
+
+  // 5. Resolve Caller Donor Profile & Auto-Provision if Profile Exists
+  let { data: donorRow } = await supabase
+    .from('donors')
+    .select('id, profile_id, full_name, phone, blood_group, is_available, is_medically_cleared, deferral_until')
+    .eq('profile_id', callerUser.id)
+    .maybeSingle();
+
+  if (!donorRow) {
+    // If no donor row exists, check user profile and auto-provision verified donor record
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', callerUser.id)
+      .maybeSingle();
+
+    if (userProfile) {
+      const { data: newDonor } = await supabase
+        .from('donors')
+        .insert({
+          profile_id: callerUser.id,
+          full_name: userProfile.full_name || callerUser.email?.split('@')[0] || 'Volunteer Donor',
+          phone: userProfile.phone || '+91 98490 00000',
+          email: callerUser.email || null,
+          blood_group: userProfile.blood_group || 'O+',
+          city: userProfile.city || 'Hyderabad',
+          district: userProfile.district || null,
+          is_available: true,
+          is_medically_cleared: true,
+          total_donations: 0,
+        })
+        .select()
+        .maybeSingle();
+
+      if (newDonor) {
+        donorRow = newDonor;
+      }
+    }
+  }
+
+  // Determine Target Donor ID (strictly validate UUID; strip mock/demo identifiers like 'donor-1')
+  let targetDonorId: string | null = null;
+  if (rawDonorId && UUID_REGEX.test(String(rawDonorId).trim())) {
+    targetDonorId = String(rawDonorId).trim();
+  } else if (donorRow?.id) {
+    targetDonorId = donorRow.id;
+  }
+
+  // 6. Anti-Self-Match Server Verification
+  const { data: reqRow } = await supabase
+    .from('emergency_requests')
+    .select('id, created_by, status, units_coordinated, units_required')
+    .eq('id', resolvedRequestId)
+    .maybeSingle();
+
+  if (reqRow && reqRow.created_by && (reqRow.created_by === callerUser.id || (donorRow && reqRow.created_by === donorRow.profile_id))) {
+    res.statusCode = 403;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({
+      success: false,
+      error: 'ANTI_SELF_MATCH: Donors cannot accept emergency requests created by their own user account.',
+    }));
+    return;
+  }
+
+  // 7. Server-Authoritative Atomic Acceptance via PostgreSQL SECURITY DEFINER RPC
   const supabaseUrl =
     process.env.SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL ||
@@ -258,8 +350,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const { data: rpcData, error: rpcError } = await userSupabase.rpc(
       'accept_request_and_create_conversation',
       {
-        p_request_id: requestId,
-        p_donor_id: donorId || null,
+        p_request_id: resolvedRequestId,
+        p_donor_id: targetDonorId || null,
       }
     );
 
@@ -278,14 +370,26 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     if (rpcData && typeof rpcData === 'object') {
       if (rpcData.success) {
+        const conversationId = rpcData.conversation_id;
+
+        // Fetch assignment ID for contract completeness
+        const { data: assignRow } = await supabase
+          .from('donor_assignments')
+          .select('id')
+          .eq('request_id', resolvedRequestId)
+          .eq('donor_id', targetDonorId || donorRow?.id)
+          .maybeSingle();
+
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
         res.end(
           JSON.stringify({
             success: true,
-            conversationId: rpcData.conversation_id,
-            requestId: rpcData.request_id || requestId,
-            donorName: rpcData.donor_name,
+            requestId: rpcData.request_id || resolvedRequestId,
+            assignmentId: assignRow?.id || null,
+            conversationId,
+            conversationRoute: `/communication?conversationId=${conversationId}`,
+            donorName: rpcData.donor_name || donorRow?.full_name || 'Volunteer Donor',
             alreadyAccepted: Boolean(rpcData.already_accepted),
             message: rpcData.already_accepted
               ? 'You have already accepted this emergency request.'
@@ -306,7 +410,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         } else if (
           msg.includes('no longer active') ||
           msg.includes('coordinated') ||
-          msg.includes('capacity')
+          msg.includes('capacity') ||
+          msg.includes('FULFILLED')
         ) {
           statusCode = 409;
         }

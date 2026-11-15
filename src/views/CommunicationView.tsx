@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useBloodStore } from '../store/useBloodStore';
 import { BeforeAcceptanceTracker } from '../components/communication/BeforeAcceptanceTracker';
 import { ConversationSidebar } from '../components/communication/ConversationSidebar';
@@ -37,27 +37,39 @@ export const CommunicationView: React.FC = () => {
     currentRole,
     currentUser,
     isOffline,
+    refreshConversations,
   } = useBloodStore();
 
-  const [selectedRequestId, setSelectedRequestId] = useState<string>(() => requests[0]?.id || '');
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+
+  const urlConversationId = searchParams.get('conversationId') || (location.state as any)?.conversationId || null;
+  const urlRequestId = searchParams.get('requestId') || (location.state as any)?.requestId || null;
+
+  const [selectedRequestId, setSelectedRequestId] = useState<string>(() => urlRequestId || requests[0]?.id || '');
   const [mobileTab, setMobileTab] = useState<'sidebar' | 'chat' | 'context'>('chat');
 
   // User-scoped conversations
   const userConversations = getConversationsForUser();
 
-  // Synchronize selectedRequestId with available requests
+  // If conversationId is specified in URL but not yet present in store, trigger refresh
   useEffect(() => {
-    if (requests.length > 0) {
-      if (!selectedRequestId || !requests.some((r) => r.id === selectedRequestId)) {
-        setSelectedRequestId(requests[0].id);
+    if (urlConversationId && !userConversations.some((c) => c.id === urlConversationId)) {
+      if (typeof refreshConversations === 'function') {
+        refreshConversations();
       }
-    } else if (selectedRequestId) {
-      setSelectedRequestId('');
     }
-  }, [requests, selectedRequestId]);
+  }, [urlConversationId]);
 
-  // Synchronize activeConversationId with available userConversations
+  // Synchronize activeConversationId with URL query params or fallback to first conversation
   useEffect(() => {
+    if (urlConversationId) {
+      if (activeConversationId !== urlConversationId) {
+        setActiveConversationId(urlConversationId);
+      }
+      return;
+    }
+
     if (userConversations.length > 0) {
       if (!activeConversationId || !userConversations.some((c) => c.id === activeConversationId)) {
         setActiveConversationId(userConversations[0].id);
@@ -65,14 +77,32 @@ export const CommunicationView: React.FC = () => {
     } else if (activeConversationId) {
       setActiveConversationId(null);
     }
-  }, [userConversations, activeConversationId, setActiveConversationId]);
-
-  // Currently selected request (null if requests array is empty)
-  const activeRequest = requests.find((r) => r.id === selectedRequestId) || requests[0] || null;
+  }, [urlConversationId, userConversations.length, activeConversationId, setActiveConversationId]);
 
   // Active conversation object strictly scoped to user's permitted conversations
   const activeConversation =
     userConversations.find((c) => c.id === activeConversationId) || userConversations[0] || null;
+
+  // Synchronize selectedRequestId with active conversation or available requests
+  useEffect(() => {
+    if (activeConversation?.requestId) {
+      if (selectedRequestId !== activeConversation.requestId) {
+        setSelectedRequestId(activeConversation.requestId);
+      }
+      return;
+    }
+
+    if (requests.length > 0) {
+      if (!selectedRequestId || !requests.some((r) => r.id === selectedRequestId)) {
+        setSelectedRequestId(requests[0].id);
+      }
+    } else if (selectedRequestId) {
+      setSelectedRequestId('');
+    }
+  }, [activeConversation?.requestId, requests, selectedRequestId]);
+
+  // Currently selected request (null if requests array is empty)
+  const activeRequest = requests.find((r) => r.id === selectedRequestId) || requests[0] || null;
 
   // Active chat stream
   const activeMessages = activeConversation ? chatMessages[activeConversation.id] || [] : [];
@@ -101,6 +131,7 @@ export const CommunicationView: React.FC = () => {
     const res = await acceptRequestAndCreateConversation(activeRequest.id, donorId);
     if (res.success && res.conversationId) {
       setActiveConversationId(res.conversationId);
+      navigate(`/communication?conversationId=${res.conversationId}`, { replace: true });
       setMobileTab('chat');
     }
   };
@@ -171,7 +202,10 @@ export const CommunicationView: React.FC = () => {
                   onClick={() => {
                     setSelectedRequestId(r.id);
                     const conv = userConversations.find((c) => c.requestId === r.id);
-                    if (conv) setActiveConversationId(conv.id);
+                    if (conv) {
+                      setActiveConversationId(conv.id);
+                      navigate(`/communication?conversationId=${conv.id}`, { replace: true });
+                    }
                   }}
                   className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
                     selectedRequestId === r.id
@@ -262,6 +296,7 @@ export const CommunicationView: React.FC = () => {
                 activeConversationId={activeConversation?.id || null}
                 onSelectConversation={(id) => {
                   setActiveConversationId(id);
+                  navigate(`/communication?conversationId=${id}`, { replace: true });
                   setMobileTab('chat');
                 }}
                 currentRole={currentRole}

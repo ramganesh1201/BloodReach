@@ -111,12 +111,12 @@ const INITIAL_INVENTORY: BloodInventoryItem[] = [
   { id: 'b0000000-0000-0000-0000-000000000004', bloodCentreId: 'a0000000-0000-0000-0000-000000000001', bloodGroup: 'O-', component: 'Packed RBC', units: 1, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
   { id: 'b0000000-0000-0000-0000-000000000005', bloodCentreId: 'a0000000-0000-0000-0000-000000000001', bloodGroup: 'AB+', component: 'Plasma', units: 6, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
   { id: 'b0000000-0000-0000-0000-000000000006', bloodCentreId: 'a0000000-0000-0000-0000-000000000001', bloodGroup: 'A+', component: 'Platelets', units: 4, updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
-  
+
   { id: 'b0000000-0000-0000-0000-000000000007', bloodCentreId: 'a0000000-0000-0000-0000-000000000002', bloodGroup: 'O+', component: 'Packed RBC', units: 1, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
   { id: 'b0000000-0000-0000-0000-000000000008', bloodCentreId: 'a0000000-0000-0000-0000-000000000002', bloodGroup: 'A-', component: 'Packed RBC', units: 3, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
   { id: 'b0000000-0000-0000-0000-000000000009', bloodCentreId: 'a0000000-0000-0000-0000-000000000002', bloodGroup: 'O+', component: 'Platelets', units: 5, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
   { id: 'b0000000-0000-0000-0000-000000000010', bloodCentreId: 'a0000000-0000-0000-0000-000000000002', bloodGroup: 'B+', component: 'Whole Blood', units: 7, updatedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
-  
+
   { id: 'b0000000-0000-0000-0000-000000000011', bloodCentreId: 'a0000000-0000-0000-0000-000000000003', bloodGroup: 'AB+', component: 'Packed RBC', units: 5, updatedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() },
   { id: 'b0000000-0000-0000-0000-000000000012', bloodCentreId: 'a0000000-0000-0000-0000-000000000003', bloodGroup: 'O-', component: 'Packed RBC', units: 0, updatedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() },
   { id: 'b0000000-0000-0000-0000-000000000013', bloodCentreId: 'a0000000-0000-0000-0000-000000000003', bloodGroup: 'O+', component: 'Packed RBC', units: 3, updatedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() },
@@ -513,7 +513,7 @@ interface BloodStoreContextType {
   isOffline: boolean;
   lastSyncTimestamp: string;
   syncOfflineQueue: () => Promise<void>;
-  
+
   // Backend & Persistence Mode
   dataSource: 'database' | 'demo';
   backendError: string | null;
@@ -571,9 +571,9 @@ interface BloodStoreContextType {
   }) => Promise<{ success: boolean; data?: EmergencyRequest; error?: string }>;
   cancelEmergencyRequest: (requestId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   updateRequestStatus: (requestId: string, status: EmergencyRequest['status'], description: string, actorRole?: string) => void;
-  
+
   // Donor Response & Atomic Assignment
-  respondToEmergency: (requestId: string, donorId: string, responseStatus: 'ACCEPTED' | 'DECLINED', channel?: 'WEB' | 'SMS') => Promise<{ success: boolean; conversationId?: string; error?: string }>;
+  respondToEmergency: (requestId: string, donorId: string, responseStatus: 'ACCEPTED' | 'DECLINED', channel?: 'WEB' | 'SMS') => Promise<{ success: boolean; conversationId?: string; conversationRoute?: string; error?: string }>;
   assignDonorToRequest: (requestId: string, donorId: string, units?: number, coordinatorId?: string, notes?: string) => Promise<{ success: boolean; message: string }>;
   cancelDonorAssignment: (assignmentId: string, reason?: string) => Promise<void>;
   toggleDonorAvailability: (donorId: string) => void;
@@ -583,11 +583,11 @@ interface BloodStoreContextType {
   isRegisteredDonor: boolean;
   updateDonorContactInfo: (donorId: string, updates: { phone?: string; city?: string; district?: string; isAvailable?: boolean }) => Promise<{ success: boolean; data?: Donor; error?: string }>;
   requestClinicalCorrection: (donorId: string, request: { field: string; requestedValue: string; reason: string; certificateNotes?: string }) => Promise<{ success: boolean; message: string; error?: string }>;
-  
+
   // Blood Bank Operations
   updateInventory: (centreId: string, bloodGroup: BloodGroup, component: BloodComponent, newUnits: number) => Promise<void>;
   verifyAndFulfillRequest: (requestId: string, centreId: string, unitsVerified: number) => Promise<void>;
-  
+
   // Communication System (Request-Linked Private Channels)
   conversations: Conversation[];
   activeConversationId: string | null;
@@ -597,7 +597,7 @@ interface BloodStoreContextType {
   activeCallSession: CallSession | null;
   isCallModalOpen: boolean;
   setActiveConversationId: (id: string | null) => void;
-  acceptRequestAndCreateConversation: (requestId: string, donorId: string) => Promise<{ success: boolean; conversationId?: string; error?: string }>;
+  acceptRequestAndCreateConversation: (requestId: string, donorId: string) => Promise<{ success: boolean; conversationId?: string; conversationRoute?: string; error?: string }>;
   sendChatMessage: (conversationId: string, content: string, attachments?: MessageAttachment[]) => Promise<{ success: boolean; messageId: string }>;
   markConversationAsRead: (conversationId: string) => void;
   submitCoordinationEvent: (conversationId: string, eventType: CoordinationEventType, eventData?: Record<string, any>) => void;
@@ -623,7 +623,7 @@ interface BloodStoreContextType {
   acknowledgeNotification: (id: string) => void;
   acknowledgeAllNotifications: () => void;
   processSmsReply: (donorPhone: string, referenceCode: string, replyText: string) => { success: boolean; isDuplicate: boolean; message: string };
-  
+
   // Reset
   resetPlatformData: () => void;
 }
@@ -1792,11 +1792,11 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           prev.map((r) =>
             r.id === newReq.id
               ? {
-                  ...r,
-                  unitsCoordinated: unitsFromInventory,
-                  status: shortageResult.hasShortage ? 'SHORTAGE_IDENTIFIED' : 'CHECKING_RESOURCES',
-                  updatedAt: new Date().toISOString(),
-                }
+                ...r,
+                unitsCoordinated: unitsFromInventory,
+                status: shortageResult.hasShortage ? 'SHORTAGE_IDENTIFIED' : 'CHECKING_RESOURCES',
+                updatedAt: new Date().toISOString(),
+              }
               : r
           )
         );
@@ -1897,7 +1897,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         city: created.city,
         recipientUserIds: matchedUserIds.length > 0 ? matchedUserIds : undefined,
         trackingToken: created.trackingToken,
-      }).catch(() => {});
+      }).catch(() => { });
     } catch {
       // Non-blocking: push alert failure never prevents request creation or local store update
     }
@@ -1919,11 +1919,11 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       prev.map((r) =>
         r.id === requestId
           ? {
-              ...r,
-              status: 'CANCELLED',
-              cancellationReason: reason,
-              updatedAt: new Date().toISOString(),
-            }
+            ...r,
+            status: 'CANCELLED',
+            cancellationReason: reason,
+            updatedAt: new Date().toISOString(),
+          }
           : r
       )
     );
@@ -1955,7 +1955,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const acceptRequestAndCreateConversation = useCallback(async (
     requestId: string,
     donorId: string
-  ): Promise<{ success: boolean; conversationId?: string; error?: string }> => {
+  ): Promise<{ success: boolean; conversationId?: string; conversationRoute?: string; error?: string }> => {
     if (dataSource === 'database' && isSupabaseConfigured) {
       setBackendError(null);
       const rpcRes = await donorResponseService.acceptRequestAndCreateConversation(requestId, donorId);
@@ -1970,7 +1970,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setRequests((prev) =>
         prev.map((r) =>
           r.id === requestId
-            ? { ...r, status: 'RESPONDER_FOUND', updatedAt: new Date().toISOString() }
+            ? { ...r, status: 'RESPONDER_FOUND', unitsCoordinated: (r.unitsCoordinated || 0) + 1, updatedAt: new Date().toISOString() }
             : r
         )
       );
@@ -1983,6 +1983,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return {
         success: true,
         conversationId: rpcRes.conversationId,
+        conversationRoute: rpcRes.conversationRoute || (rpcRes.conversationId ? `/communication?conversationId=${rpcRes.conversationId}` : '/communication'),
       };
     }
 
@@ -2014,10 +2015,10 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       prev.map((r) =>
         r.id === requestId
           ? {
-              ...r,
-              status: 'RESPONDER_FOUND',
-              updatedAt: new Date().toISOString(),
-            }
+            ...r,
+            status: 'RESPONDER_FOUND',
+            updatedAt: new Date().toISOString(),
+          }
           : r
       )
     );
@@ -2095,7 +2096,11 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
 
     setActiveConversationId(finalConvId);
-    return { success: true, conversationId: finalConvId };
+    return {
+      success: true,
+      conversationId: finalConvId,
+      conversationRoute: `/communication?conversationId=${finalConvId}`,
+    };
   }, [dataSource, requests, donors, donorResponses, conversations, addEvent, refreshConversations]);
 
   // Donor Response
@@ -2104,7 +2109,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     donorId: string,
     responseStatus: 'ACCEPTED' | 'DECLINED',
     channel: 'WEB' | 'SMS' = 'WEB'
-  ): Promise<{ success: boolean; conversationId?: string; error?: string }> => {
+  ): Promise<{ success: boolean; conversationId?: string; conversationRoute?: string; error?: string }> => {
     if (responseStatus === 'ACCEPTED') {
       return await acceptRequestAndCreateConversation(requestId, donorId);
     }
@@ -2210,12 +2215,12 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       prev.map((r) =>
         r.id === requestId
           ? {
-              ...r,
-              unitsCoordinated: newCoordinated,
-              status: isCoordinatedComplete ? 'AWAITING_CENTRE_VERIFICATION' : 'DONOR_ASSIGNED',
-              assignedDonors: [...(r.assignedDonors || []).filter((a) => a.donorId !== donorId), newAssignment],
-              updatedAt: new Date().toISOString(),
-            }
+            ...r,
+            unitsCoordinated: newCoordinated,
+            status: isCoordinatedComplete ? 'AWAITING_CENTRE_VERIFICATION' : 'DONOR_ASSIGNED',
+            assignedDonors: [...(r.assignedDonors || []).filter((a) => a.donorId !== donorId), newAssignment],
+            updatedAt: new Date().toISOString(),
+          }
           : r
       )
     );
@@ -2265,11 +2270,11 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         prev.map((r) =>
           r.id === req.id
             ? {
-                ...r,
-                unitsCoordinated: newCoordinated,
-                status: newCoordinated === 0 ? 'AWAITING_RESPONSE' : 'DONOR_ASSIGNED',
-                updatedAt: new Date().toISOString(),
-              }
+              ...r,
+              unitsCoordinated: newCoordinated,
+              status: newCoordinated === 0 ? 'AWAITING_RESPONSE' : 'DONOR_ASSIGNED',
+              updatedAt: new Date().toISOString(),
+            }
             : r
         )
       );
@@ -2295,11 +2300,11 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       prev.map((d) =>
         d.id === donorId
           ? {
-              ...d,
-              availabilityState: state,
-              isAvailable: state === 'AVAILABLE',
-              availabilityUpdatedAt: nowIso,
-            }
+            ...d,
+            availabilityState: state,
+            isAvailable: state === 'AVAILABLE',
+            availabilityUpdatedAt: nowIso,
+          }
           : d
       )
     );
@@ -2363,10 +2368,38 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     }
 
-    // If currentUser bloodGroup was missing, update it
-    if (input.bloodGroup && !currentUser.bloodGroup) {
-      setCurrentUser((prev) => (prev ? { ...prev, bloodGroup: input.bloodGroup } : null));
+    // Update profile role to donor and synchronize local auth session
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            role: 'donor',
+            blood_group: input.bloodGroup,
+            phone: input.phone,
+            city: input.city,
+            district: input.district || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', currentUser.id);
+      } catch (pErr) {
+        console.warn('[CareLoop Store] Failed to update profile role to donor:', pErr);
+      }
     }
+
+    const updatedProfile: UserProfile = {
+      ...currentUser,
+      role: 'donor',
+      bloodGroup: input.bloodGroup,
+      phone: input.phone,
+      city: input.city,
+      district: input.district,
+      updatedAt: new Date().toISOString(),
+    };
+    setCurrentUser(updatedProfile);
+    setAuthenticatedRole('donor');
+    localStorage.setItem('careloop_user_profile', JSON.stringify(updatedProfile));
+    localStorage.setItem('careloop_auth_role', 'donor');
 
     // Recipient-specific notification for the applicant
     notificationService.sendInAppNotification({
@@ -2505,11 +2538,11 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       prev.map((c) =>
         c.id === conversationId
           ? {
-              ...c,
-              lastMessage: content || (attachments?.length ? 'Sent an attachment' : 'New message'),
-              lastMessageTimestamp: nowIso,
-              updatedAt: nowIso,
-            }
+            ...c,
+            lastMessage: content || (attachments?.length ? 'Sent an attachment' : 'New message'),
+            lastMessageTimestamp: nowIso,
+            updatedAt: nowIso,
+          }
           : c
       )
     );
@@ -2667,11 +2700,11 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       prev.map((c) =>
         c.id === conversationId
           ? {
-              ...c,
-              lastMessage: streamMessage.content,
-              lastMessageTimestamp: nowIso,
-              updatedAt: nowIso,
-            }
+            ...c,
+            lastMessage: streamMessage.content,
+            lastMessageTimestamp: nowIso,
+            updatedAt: nowIso,
+          }
           : c
       )
     );
@@ -3067,12 +3100,12 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setActiveCallSession((curr) =>
       curr && curr.id === sessionId
         ? {
-            ...curr,
-            status: 'ENDED',
-            endedAt: nowIso,
-            durationSeconds: durationSec,
-            endReason: reason,
-          }
+          ...curr,
+          status: 'ENDED',
+          endedAt: nowIso,
+          durationSeconds: durationSec,
+          endReason: reason,
+        }
         : null
     );
 
@@ -3177,21 +3210,50 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // User-Scoped Filter: Donors ONLY see their own conversation; Requesters see all accepted donors for their requests
   const getConversationsForUser = useCallback((): Conversation[] => {
     if (currentRole === 'donor') {
-      const activeDonorId = currentUser?.id?.startsWith('donor-')
-        ? currentUser.id
-        : donors.find((d) => d.email === currentUser?.email || d.phone === currentUser?.phone)?.id || 'donor-1';
-      return conversations.filter((c) => c.donorId === activeDonorId);
+      const activeDonorProfile =
+        userDonorProfile ||
+        donors.find((d) => (currentUser?.id && d.profileId === currentUser.id) || (currentUser?.email && d.email === currentUser.email));
+      const activeDonorId = activeDonorProfile?.id || (currentUser?.id?.startsWith('donor-') ? currentUser.id : null);
+
+      return conversations.filter((c) => {
+        // 1. Direct active selection always preserved
+        if (activeConversationId && c.id === activeConversationId) return true;
+        // 2. Linked donor profile table ID match
+        if (activeDonorId && c.donorId === activeDonorId) return true;
+        // 3. User account UUID match
+        if (currentUser?.id && (c.donorId === currentUser.id || (c as any).donorProfileId === currentUser.id)) return true;
+        // 4. Demo experience fallback
+        if (demoExperience && (c.donorId === 'donor-1' || c.donorId === 'donor-sarah-jenkins' || c.donorName?.includes('Sarah'))) return true;
+        // 5. In live database mode, rows returned by Supabase RLS belong strictly to caller
+        if (dataSource === 'database' && currentUser?.id) return true;
+        return false;
+      });
     }
     if (currentRole === 'patient') {
       const patientPhone = currentUser?.phone || '+91 98490 55123';
       const patientId = currentUser?.id || 'usr-patient';
       return conversations.filter(
-        (c) => c.requesterId === patientId || c.requesterPhone === patientPhone || requests.some((r) => r.id === c.requestId)
+        (c) =>
+          c.id === activeConversationId ||
+          c.requesterId === patientId ||
+          c.requesterPhone === patientPhone ||
+          requests.some((r) => r.id === c.requestId) ||
+          (dataSource === 'database' && currentUser?.id)
       );
     }
     // Coordinator & Blood Centre & Admin have clinical oversight
     return conversations;
-  }, [currentRole, currentUser, conversations, donors, requests]);
+  }, [
+    currentRole,
+    currentUser,
+    conversations,
+    donors,
+    requests,
+    userDonorProfile,
+    activeConversationId,
+    demoExperience,
+    dataSource,
+  ]);
 
   const updateInventory = async (
     centreId: string,
@@ -3287,11 +3349,11 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       prev.map((r) =>
         r.id === requestId
           ? {
-              ...r,
-              unitsCoordinated: newCoordinated,
-              status: isFulfilled ? 'FULFILLED' : 'AWAITING_CENTRE_VERIFICATION',
-              updatedAt: new Date().toISOString(),
-            }
+            ...r,
+            unitsCoordinated: newCoordinated,
+            status: isFulfilled ? 'FULFILLED' : 'AWAITING_CENTRE_VERIFICATION',
+            updatedAt: new Date().toISOString(),
+          }
           : r
       )
     );
@@ -3299,8 +3361,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     addEvent(
       requestId,
       isFulfilled ? 'REQUEST_FULFILLED' : 'UNITS_VERIFIED',
-      `Blood Centre (${centre?.name || 'Verified Staff'}) verified & issued ${unitsVerified} unit(s). ${
-        isFulfilled ? 'Emergency blood request fully fulfilled and resolved.' : 'Awaiting remaining unit(s).'
+      `Blood Centre (${centre?.name || 'Verified Staff'}) verified & issued ${unitsVerified} unit(s). ${isFulfilled ? 'Emergency blood request fully fulfilled and resolved.' : 'Awaiting remaining unit(s).'
       }`,
       'Blood Centre Staff'
     );
@@ -3326,10 +3387,10 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       prev.map((r) =>
         r.id === requestId
           ? {
-              ...r,
-              escalationLevel: targetLevel,
-              updatedAt: new Date().toISOString(),
-            }
+            ...r,
+            escalationLevel: targetLevel,
+            updatedAt: new Date().toISOString(),
+          }
           : r
       )
     );
