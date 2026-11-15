@@ -254,23 +254,23 @@ class FcmService {
         throw new Error('Unable to initialize Firebase messaging instance.');
       }
 
-      // 3. Register or verify Service Worker Registration
+      // 3. Register or verify Unified Service Worker Registration
       let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
       if ('serviceWorker' in navigator) {
         try {
-          const cfg = this.getConfig();
-          const query = new URLSearchParams();
-          if (cfg.apiKey && cfg.apiKey !== 'REPLACE_ME') query.set('apiKey', cfg.apiKey);
-          if (cfg.authDomain && cfg.authDomain !== 'REPLACE_ME') query.set('authDomain', cfg.authDomain);
-          if (cfg.projectId && cfg.projectId !== 'REPLACE_ME') query.set('projectId', cfg.projectId);
-          if (cfg.storageBucket && cfg.storageBucket !== 'REPLACE_ME') query.set('storageBucket', cfg.storageBucket);
-          if (cfg.messagingSenderId && cfg.messagingSenderId !== 'REPLACE_ME') query.set('messagingSenderId', cfg.messagingSenderId);
-          if (cfg.appId && cfg.appId !== 'REPLACE_ME') query.set('appId', cfg.appId);
+          // Unregister legacy sw.js to ensure only one authoritative worker at scope '/'
+          try {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (const r of regs) {
+              if (r.active && r.active.scriptURL.endsWith('/sw.js')) {
+                await r.unregister();
+              }
+            }
+          } catch {
+            // Non-blocking cleanup
+          }
 
-          const queryString = query.toString();
-          const swUrl = queryString ? `/firebase-messaging-sw.js?${queryString}` : '/firebase-messaging-sw.js';
-
-          serviceWorkerRegistration = await navigator.serviceWorker.register(swUrl, {
+          serviceWorkerRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
             scope: '/',
           });
           await navigator.serviceWorker.ready;

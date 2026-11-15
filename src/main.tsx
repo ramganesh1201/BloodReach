@@ -30,10 +30,19 @@ window.addEventListener('error', (event) => {
   }
 });
 
-// Register PWA Service Worker
+// Register Unified PWA & Push Service Worker
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
+    // Unregister legacy sw.js to ensure only one authoritative worker at scope '/'
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const reg of registrations) {
+        if (reg.active && reg.active.scriptURL.endsWith('/sw.js')) {
+          reg.unregister();
+        }
+      }
+    }).catch(() => {});
+
+    navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' }).catch((err) => {
       console.warn('Service worker registration failed:', err);
     });
   });

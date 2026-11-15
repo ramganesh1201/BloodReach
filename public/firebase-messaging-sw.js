@@ -1,21 +1,32 @@
 // ============================================================================
-// CareLoop — Firebase Cloud Messaging Service Worker
-// Stack: PWA + Web Push + Firebase Cloud Messaging v9+ (compat mode)
+// CareLoop — Consolidated Unified Service Worker
+// Stack: PWA Offline Shell + Web Push + Firebase Cloud Messaging v9+ (compat mode)
 // File: public/firebase-messaging-sw.js
+// Scope: / (Root Scope)
 // ============================================================================
-// SECURITY & PRIVACY MANDATES:
-// 1. Generic, privacy-preserving notification text (Zero patient PII).
-// 2. Navigates to verified CareLoop routes on notification click.
-// 3. Deduplicates notifications with request-specific tags.
-// 4. Maintains offline shell cache for PWA resilience.
+// ARCHITECTURAL MANDATES:
+// 1. Single authoritative service worker controlling the root origin scope (/).
+// 2. Dual-capability: Handles both PWA offline asset caching and Firebase background push.
+// 3. Static fallback Firebase configuration prevents silent failures on bare worker imports.
+// 4. Zero patient PII in notifications (clinical summaries only).
+// 5. Deep-linking client navigation on notification click.
 // ============================================================================
 
 // 1. Service Worker Compatible Firebase Scripts
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
-// 2. Public Firebase Web App Configuration
-// Extracts parameters dynamically from registration URL query string or defaults to placeholders
+// 2. Canonical Firebase Web App Configuration
+// Public web client credentials with dynamic query parameter override support
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCf3jJRJuh-TCgQa0u22527oyGLSexa5wE",
+  authDomain: "careloop-7f47d.firebaseapp.com",
+  projectId: "careloop-7f47d",
+  storageBucket: "careloop-7f47d.firebasestorage.app",
+  messagingSenderId: "908211766288",
+  appId: "1:908211766288:web:9183c985015dad4a0f7695",
+};
+
 let queryApiKey = null;
 let queryAuthDomain = null;
 let queryProjectId = null;
@@ -34,30 +45,32 @@ try {
     queryAppId = searchParams.get('appId');
   }
 } catch (e) {
-  // Fallback to static values
+  // Fallback to static defaults
 }
 
 const firebaseConfig = {
-  apiKey: queryApiKey || "REPLACE_ME",
-  authDomain: queryAuthDomain || "REPLACE_ME",
-  projectId: queryProjectId || "REPLACE_ME",
-  storageBucket: queryStorageBucket || "REPLACE_ME",
-  messagingSenderId: queryMessagingSenderId || "REPLACE_ME",
-  appId: queryAppId || "REPLACE_ME",
+  apiKey: queryApiKey || DEFAULT_FIREBASE_CONFIG.apiKey,
+  authDomain: queryAuthDomain || DEFAULT_FIREBASE_CONFIG.authDomain,
+  projectId: queryProjectId || DEFAULT_FIREBASE_CONFIG.projectId,
+  storageBucket: queryStorageBucket || DEFAULT_FIREBASE_CONFIG.storageBucket,
+  messagingSenderId: queryMessagingSenderId || DEFAULT_FIREBASE_CONFIG.messagingSenderId,
+  appId: queryAppId || DEFAULT_FIREBASE_CONFIG.appId,
 };
 
 // 3. Safe Firebase Initialization
 let messaging = null;
 try {
   if (typeof firebase !== 'undefined' && firebaseConfig.apiKey && firebaseConfig.apiKey !== 'REPLACE_ME') {
-    firebase.initializeApp(firebaseConfig);
+    if (!firebase.apps || firebase.apps.length === 0) {
+      firebase.initializeApp(firebaseConfig);
+    }
     messaging = firebase.messaging();
   }
 } catch (err) {
-  // Silent fallback when config placeholders are present
+  console.warn('[firebase-messaging-sw] Firebase initialization deferred:', err);
 }
 
-// 4. Background Push Notification Handler
+// 4. Background Push Notification Handler (Firebase SDK)
 if (messaging) {
   messaging.onBackgroundMessage((payload) => {
     // Zero Patient PII: Use generic clinical titles and non-identifying emergency summaries
@@ -90,13 +103,12 @@ if (messaging) {
   });
 }
 
-// Fallback standard 'push' event listener for direct Web Push payloads
+// 5. Fallback Standard 'push' Event Listener for Direct Web Push Payloads
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
   try {
     const data = event.data.json();
-    // If handled by Firebase SDK, avoid duplicate display
     if (data.notification || data.data) {
       const title = data.notification?.title || data.data?.title || 'CareLoop Emergency Blood Alert';
       const body = data.notification?.body || data.data?.body || 'Urgent blood coordination alert.';
@@ -109,16 +121,22 @@ self.addEventListener('push', (event) => {
           icon: '/logo.png',
           badge: '/favicon.svg',
           tag: `careloop-req-${reqId}`,
-          data: { url: targetUrl },
+          renotify: true,
+          requireInteraction: true,
+          data: { url: targetUrl, requestId: reqId },
+          actions: [
+            { action: 'open', title: 'Open CareLoop' },
+            { action: 'dismiss', title: 'Dismiss' },
+          ],
         })
       );
     }
   } catch {
-    // Non-JSON payload
+    // Non-JSON push payload
   }
 });
 
-// 5. Notification Click & App Navigation Handler
+// 6. Notification Click & App Navigation Handler
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
@@ -147,13 +165,20 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// 6. PWA Offline Cache Management (Ensures PWA shell functions under this service worker)
-const CACHE_NAME = 'careloop-pwa-cache-v1';
-const ASSETS_TO_CACHE = ['/', '/index.html', '/manifest.json', '/favicon.svg', '/logo.png'];
+// 7. PWA Offline Cache Management & Version Lifecycle
+const CACHE_NAME = 'careloop-cache-v4';
+const IMMUTABLE_ASSETS = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/favicon.svg',
+  '/logo.png',
+  '/logo.svg',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE)).catch(() => {})
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(IMMUTABLE_ASSETS)).catch(() => {})
   );
   self.skipWaiting();
 });
@@ -167,3 +192,68 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// 8. Fetch Event: Network-First for Navigation, Cache-First for Assets
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+
+  // Network-first for navigation requests and index.html to prevent stale chunk hash mismatches
+  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-cache' })
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  // Cache-first for immutable static assets (/assets/*, favicon, manifest, svgs)
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        const contentType = cachedResponse.headers.get('content-type') || '';
+        // Guard against corrupted HTML cached as JS
+        if (url.pathname.endsWith('.js') && contentType.includes('text/html')) {
+          caches.open(CACHE_NAME).then((cache) => cache.delete(event.request));
+        } else {
+          return cachedResponse;
+        }
+      }
+
+      return fetch(event.request).then((networkResponse) => {
+        if (!networkResponse || networkResponse.status !== 200) {
+          return networkResponse;
+        }
+
+        const contentType = networkResponse.headers.get('content-type') || '';
+
+        // STRICT GUARD: Never cache text/html responses for .js or .css asset requests (Vercel 404 rewrite fallback)
+        if (url.pathname.endsWith('.js') && !contentType.includes('javascript')) {
+          return networkResponse;
+        }
+        if (url.pathname.endsWith('.css') && !contentType.includes('css')) {
+          return networkResponse;
+        }
+
+        if (
+          url.pathname.startsWith('/assets/') ||
+          url.pathname.endsWith('.svg') ||
+          url.pathname.endsWith('.png') ||
+          url.pathname.endsWith('.json')
+        ) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+
+        return networkResponse;
+      });
+    })
+  );
+});
