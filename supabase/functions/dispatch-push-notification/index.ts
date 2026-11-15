@@ -268,9 +268,12 @@ function isDonorClinicallyEligible(
 // ============================================================================
 function pemToPkcs8(pem: string): Uint8Array {
   const b64 = pem
+    .replace(/^["']|["']$/g, '')
     .replace(/-----BEGIN (RSA )?PRIVATE KEY-----/g, '')
     .replace(/-----END (RSA )?PRIVATE KEY-----/g, '')
     .replace(/\\n/g, '')
+    .replace(/\n/g, '')
+    .replace(/\r/g, '')
     .replace(/\s+/g, '');
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
@@ -349,7 +352,8 @@ async function getGoogleOAuth2AccessToken(
 // MAIN EDGE FUNCTION HANDLER
 // ============================================================================
 serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
+  try {
+    if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS });
   }
 
@@ -515,10 +519,22 @@ serve(async (req: Request) => {
     );
   }
 
-  // 6. Inspect Firebase Service Account Secrets
-  const projectId = Deno.env.get('FIREBASE_PROJECT_ID');
-  const clientEmail = Deno.env.get('FIREBASE_CLIENT_EMAIL');
-  const privateKey = Deno.env.get('FIREBASE_PRIVATE_KEY');
+  // 6. Inspect Firebase Service Account Secrets (Individual Vars or Unified JSON)
+  let projectId = Deno.env.get('FIREBASE_PROJECT_ID');
+  let clientEmail = Deno.env.get('FIREBASE_CLIENT_EMAIL');
+  let privateKey = Deno.env.get('FIREBASE_PRIVATE_KEY');
+
+  const saRaw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT') || Deno.env.get('FIREBASE_SERVICE_ACCOUNT_KEY');
+  if (saRaw) {
+    try {
+      const sa = JSON.parse(saRaw);
+      projectId = projectId || sa.project_id;
+      clientEmail = clientEmail || sa.client_email;
+      privateKey = privateKey || sa.private_key;
+    } catch (e) {
+      console.warn('[dispatch-push-notification] Failed to parse FIREBASE_SERVICE_ACCOUNT JSON:', e);
+    }
+  }
 
   const isConfigured = Boolean(
     projectId &&
@@ -678,4 +694,14 @@ serve(async (req: Request) => {
     }),
     { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
   );
+  } catch (err: any) {
+    console.error('[dispatch-push-notification] Unhandled error:', err?.message || err);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Internal server error processing push notification dispatch.',
+      }),
+      { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+    );
+  }
 });

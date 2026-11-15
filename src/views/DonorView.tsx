@@ -12,12 +12,14 @@ import {
 } from '../services/matchingEngine';
 import { notificationService } from '../services/notificationService';
 import { smsNotificationService } from '../services/smsNotificationService';
+import { fcmService } from '../services/fcmService';
 import { DonorAvailabilityState, BloodGroup, BloodComponent } from '../types';
 import { WorkspaceHeader } from '../components/common/WorkspaceHeader';
 import { StatCard } from '../components/common/StatCard';
 import { EmptyState } from '../components/common/EmptyState';
 import {
   Bell,
+  BellRing,
   ShieldCheck,
   ShieldAlert,
   Heart,
@@ -122,6 +124,16 @@ export const DonorView: React.FC = () => {
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
+  const [pushState, setPushState] = useState(fcmService.getState());
+  useEffect(() => {
+    const unsub = fcmService.subscribeToPushState((s) => setPushState(s));
+    return unsub;
+  }, []);
+
+  const handleEnablePush = async () => {
+    await fcmService.requestPermissionAndGetToken(currentUser?.id);
+  };
+
   const [notificationFilter, setNotificationFilter] = useState<'ALL' | 'UNREAD'>('ALL');
   const [selfDeferralDays, setSelfDeferralDays] = useState<number>(14);
   const [selfDeferralReason, setSelfDeferralReason] = useState<string>('Recent Dental / Travel');
@@ -502,6 +514,7 @@ export const DonorView: React.FC = () => {
             currentState={donorAvailabilityState}
             updatedAt={activeDonor.availabilityUpdatedAt}
             onSelectState={(state) => setDonorAvailabilityState(activeDonor.id, state)}
+            userId={currentUser?.id}
           />
         </div>
 
@@ -671,6 +684,7 @@ export const DonorView: React.FC = () => {
                   currentState={donorAvailabilityState}
                   updatedAt={activeDonor.availabilityUpdatedAt}
                   onSelectState={(state) => setDonorAvailabilityState(activeDonor.id, state)}
+                  userId={currentUser?.id}
                 />
               </div>
             </div>
@@ -842,6 +856,54 @@ export const DonorView: React.FC = () => {
               </button>
             </div>
           </div>
+
+
+          {/* Push Notification Device Registration Card */}
+          {pushState.isSupported && (
+            <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-brand/10 text-brand flex items-center justify-center shrink-0">
+                  <BellRing className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-app-text">Emergency Push Notifications</span>
+                    {pushState.permission === 'granted' ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-success/20 text-success border border-success/30">
+                        <CheckCircle2 className="w-3 h-3" /> ACTIVE
+                      </span>
+                    ) : pushState.permission === 'denied' ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-warning/20 text-warning border border-warning/30">
+                        <AlertCircle className="w-3 h-3" /> BLOCKED IN BROWSER
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-app-border text-app-text-secondary">
+                        NOT REGISTERED
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-app-text-secondary mt-0.5">
+                    {pushState.permission === 'granted'
+                      ? 'This browser device is registered to receive critical hospital blood emergency alerts instantly.'
+                      : pushState.permission === 'denied'
+                      ? 'Browser notifications are blocked. Enable notifications in your browser site permissions to receive alerts.'
+                      : 'Register this device to receive immediate push alerts when matching emergency blood requests are posted.'}
+                  </p>
+                </div>
+              </div>
+
+              {pushState.permission !== 'granted' && pushState.permission !== 'denied' && (
+                <button
+                  type="button"
+                  onClick={handleEnablePush}
+                  disabled={pushState.loading}
+                  className="px-3 py-1.5 text-xs font-bold text-white bg-brand hover:bg-brand-dark rounded-lg transition-colors shadow-xs shrink-0 disabled:opacity-50"
+                >
+                  {pushState.loading ? 'Registering...' : 'Enable Push Alerts'}
+                </button>
+              )}
+            </div>
+          )}
 
           {filteredNotifications.length === 0 ? (
             <div className="py-8 text-center text-xs text-app-text-secondary">

@@ -1,18 +1,32 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { DonorAvailabilityState } from '../../types';
-import { Power, Clock, CheckCircle2, AlertCircle, Moon } from 'lucide-react';
+import { Clock, CheckCircle2, AlertCircle, Moon, BellRing } from 'lucide-react';
+import { fcmService } from '../../services/fcmService';
 
 interface AvailabilityToggleProps {
   currentState: DonorAvailabilityState;
   updatedAt?: string;
   onSelectState: (state: DonorAvailabilityState) => void;
+  userId?: string;
 }
 
 export const AvailabilityToggle: React.FC<AvailabilityToggleProps> = ({
   currentState = 'AVAILABLE',
   updatedAt,
   onSelectState,
+  userId,
 }) => {
+  const [pushState, setPushState] = useState(fcmService.getState());
+
+  useEffect(() => {
+    const unsub = fcmService.subscribeToPushState((s) => setPushState(s));
+    return unsub;
+  }, []);
+
+  const handleEnablePush = async () => {
+    await fcmService.requestPermissionAndGetToken(userId);
+  };
+
   const states: { key: DonorAvailabilityState; label: string; desc: string; icon: any }[] = [
     {
       key: 'AVAILABLE',
@@ -82,6 +96,38 @@ export const AvailabilityToggle: React.FC<AvailabilityToggleProps> = ({
           })}
         </div>
       </div>
+
+      {/* Push Notification Device Status & Quick Activation */}
+      {pushState.isSupported && currentState === 'AVAILABLE' && (
+        <div className="pt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
+          <div className="flex items-center gap-1.5">
+            <BellRing className="w-3.5 h-3.5 text-brand shrink-0" />
+            <span className="text-app-text-secondary">Browser Push Alerts:</span>
+            {pushState.permission === 'granted' ? (
+              <span className="inline-flex items-center gap-1 text-success font-semibold">
+                <CheckCircle2 className="w-3 h-3" /> Active & Registered
+              </span>
+            ) : pushState.permission === 'denied' ? (
+              <span className="inline-flex items-center gap-1 text-app-text-secondary font-medium">
+                <AlertCircle className="w-3 h-3 text-warning" /> Blocked in browser settings
+              </span>
+            ) : (
+              <span className="text-app-text-secondary font-medium">Not enabled on this device</span>
+            )}
+          </div>
+
+          {pushState.permission !== 'granted' && pushState.permission !== 'denied' && (
+            <button
+              type="button"
+              onClick={handleEnablePush}
+              disabled={pushState.loading}
+              className="px-2.5 py-1 text-[10px] font-bold text-white bg-brand hover:bg-brand-dark rounded-md transition-colors shadow-2xs self-start sm:self-auto disabled:opacity-50"
+            >
+              {pushState.loading ? 'Activating...' : 'Enable Push Alerts'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

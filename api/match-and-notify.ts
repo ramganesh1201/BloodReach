@@ -193,7 +193,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  // 1. Fetch Emergency Request
+  // 1. Caller Authentication: Require Bearer token or trackingToken
+  if (!authHeader.startsWith('Bearer ') && !trackingToken) {
+    res.statusCode = 401;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ success: false, error: 'Authentication required. Missing Bearer token or tracking capability.' }));
+    return;
+  }
+
+  // 2. Fetch Emergency Request
   const { data: request, error: reqErr } = await supabase
     .from('emergency_requests')
     .select('*')

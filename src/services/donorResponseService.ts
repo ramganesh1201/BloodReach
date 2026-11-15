@@ -249,6 +249,9 @@ export async function acceptRequestAndCreateConversation(
               alreadyAccepted: Boolean(apiData.alreadyAccepted),
             };
           }
+        } else if (apiResponse.status === 404) {
+          // If serverless endpoint returned 404, fall through to client RPC fallback
+          console.warn('[DonorResponseService] /api/accept-request returned 404, falling back to direct RPC.');
         } else if (apiResponse.status >= 400 && apiResponse.status < 500) {
           const errData = await apiResponse.json().catch(() => ({}));
           return {

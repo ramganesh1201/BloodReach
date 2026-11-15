@@ -459,14 +459,26 @@ class FcmService {
     // 1. Trigger serverless matching and notification endpoint (production runtime)
     if (typeof window !== 'undefined' && typeof fetch === 'function' && process.env.NODE_ENV !== 'test') {
       try {
-        fetch('/api/match-and-notify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            requestId: options.requestId,
-            trackingToken: options.trackingToken,
-          }),
-        }).catch(() => {});
+        (async () => {
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            if (sessionData?.session?.access_token) {
+              headers['Authorization'] = `Bearer ${sessionData.session.access_token}`;
+            }
+          } catch {
+            // Non-blocking session retrieval
+          }
+
+          fetch('/api/match-and-notify', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              requestId: options.requestId,
+              trackingToken: options.trackingToken,
+            }),
+          }).catch(() => {});
+        })();
       } catch {
         // Non-blocking
       }
