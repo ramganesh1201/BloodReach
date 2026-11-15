@@ -531,6 +531,7 @@ interface BloodStoreContextType {
 
   // Auth Operations
   signIn: (email: string, password?: string) => Promise<{ success: boolean; error?: string; role?: UserRole }>;
+  signInWithOAuth: (provider?: 'google') => Promise<{ success: boolean; error?: string }>;
   signUp: (params: {
     email: string;
     password?: string;
@@ -1696,6 +1697,37 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         message: err?.message || 'Failed to dispatch reset email.',
         error: err?.message,
       };
+    }
+  };
+
+  const signInWithOAuth = async (
+    provider: 'google' = 'google'
+  ): Promise<{ success: boolean; error?: string }> => {
+    setIsAuthLoading(true);
+    setAuthError(null);
+    try {
+      if (!isSupabaseConfigured) {
+        setIsAuthLoading(false);
+        return { success: false, error: 'Database authentication is not configured.' };
+      }
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        },
+      });
+      if (error) {
+        const msg = error.message;
+        setAuthError(msg);
+        setIsAuthLoading(false);
+        return { success: false, error: msg };
+      }
+      return { success: true };
+    } catch (err: any) {
+      const msg = err?.message || 'OAuth authentication failed.';
+      setAuthError(msg);
+      setIsAuthLoading(false);
+      return { success: false, error: msg };
     }
   };
 
@@ -3555,6 +3587,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         isAuthLoading,
         authError,
         signIn,
+        signInWithOAuth,
         signUp,
         resetPassword,
         signOut,
