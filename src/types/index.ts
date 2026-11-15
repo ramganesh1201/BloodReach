@@ -235,6 +235,7 @@ export interface RequestMessage {
 // ============================================================================
 
 export type ConversationStatus = 'PENDING_ACCEPTANCE' | 'ACTIVE' | 'RESTRICTED' | 'CLOSED';
+export type CaseLifecycleStatus = 'active' | 'completion_pending' | 'completed';
 
 export interface Conversation {
   id: string;
@@ -242,6 +243,19 @@ export interface Conversation {
   donorId: string;
   requesterId: string;
   status: ConversationStatus;
+  lifecycleStatus?: CaseLifecycleStatus;
+  completionProposedBy?: string;
+  completionProposedAt?: string;
+  completionProposalReason?: string;
+  completedBy?: string;
+  completedAt?: string;
+  completionNotes?: string;
+  resolvedByCoordinator?: string;
+  coordinatorResolutionReason?: string;
+  isArchived?: boolean;
+  archivedAt?: string;
+  isMuted?: boolean;
+  mutedAt?: string;
   donorName: string;
   donorPhone?: string;
   donorBloodGroup: BloodGroup;
@@ -260,6 +274,21 @@ export interface Conversation {
   updatedAt: string;
   closedAt?: string;
   closureReason?: string;
+}
+
+export interface CallHistoryRecord {
+  id: string;
+  conversationId: string;
+  requestId?: string;
+  callerId: string;
+  receiverId: string;
+  callType: 'VOICE' | 'DIALER_FALLBACK';
+  status: 'INITIATING' | 'RINGING' | 'ACCEPTED' | 'CONNECTED' | 'ENDED' | 'REJECTED' | 'TIMEOUT' | 'FAILED';
+  startedAt: string;
+  endedAt?: string;
+  durationSeconds?: number;
+  endReason?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface ConversationParticipant {

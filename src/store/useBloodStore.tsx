@@ -50,6 +50,8 @@ import * as donorResponseService from '../services/donorResponseService';
 import * as conversationService from '../services/conversationService';
 import * as inventoryService from '../services/inventoryService';
 import * as donorAssignmentService from '../services/donorAssignmentService';
+import * as caseLifecycleService from '../services/caseLifecycleService';
+import { CallHistoryRecord, CaseLifecycleStatus } from '../types';
 
 // Seed Initial Verified Healthcare Centres
 const INITIAL_BLOOD_CENTRES: BloodCentre[] = [
@@ -619,6 +621,15 @@ interface BloodStoreContextType {
   getConversationsForUser: () => Conversation[];
   sendMessage: (requestId: string, content: string, channel?: 'IN_APP' | 'SMS') => Promise<{ success: boolean }>;
 
+  // Case Lifecycle & Messenger Operations
+  proposeCaseCompletion: (conversationId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
+  confirmCaseCompletion: (conversationId: string, notes?: string) => Promise<{ success: boolean; error?: string }>;
+  rejectCaseCompletion: (conversationId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
+  coordinatorResolveCase: (conversationId: string, reason: string, notes?: string) => Promise<{ success: boolean; error?: string }>;
+  toggleConversationArchive: (conversationId: string, isArchived: boolean) => Promise<{ success: boolean; error?: string }>;
+  toggleConversationMute: (conversationId: string, isMuted: boolean) => Promise<{ success: boolean; error?: string }>;
+  getConversationCallHistory: (conversationId: string) => Promise<CallHistoryRecord[]>;
+
   // Escalation & Notifications
   escalateRequest: (requestId: string, manualLevel?: number) => void;
   acknowledgeNotification: (id: string) => void;
@@ -1007,7 +1018,8 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (res.error) {
         setBackendError(res.error);
       } else if (res.data) {
-        setConversations(res.data);
+        const enriched = await caseLifecycleService.enrichConversationsWithLifecycle(res.data, currentUser.id);
+        setConversations(enriched);
       }
     } catch (err: any) {
       setBackendError(err?.message || 'Failed to refresh conversations');
@@ -2216,6 +2228,227 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     return { success: true };
   };
+
+  // ============================================================================
+  // Case Lifecycle & Messenger Operations
+  // ============================================================================
+  const proposeCaseCompletion = useCallback(async (
+    conversationId: string,
+    reason?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      const res = await caseLifecycleService.proposeCaseCompletion(conversationId, reason);
+      if (!res.success) {
+        return { success: false, error: res.error };
+      }
+      await refreshConversations();
+      return { success: true };
+    }
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conversationId
+          ? {
+              ...c,
+              lifecycleStatus: 'completion_pending',
+              completionProposedBy: currentUser?.id || 'usr-current',
+              completionProposedAt: new Date().toISOString(),
+              completionProposalReason: reason,
+              updatedAt: new Date().toISOString(),
+            }
+          : c
+      )
+    );
+    return { success: true };
+  }, [dataSource, currentUser?.id, refreshConversations]);
+
+  const confirmCaseCompletion = useCallback(async (
+    conversationId: string,
+    notes?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      const res = await caseLifecycleService.confirmCaseCompletion(conversationId, notes);
+      if (!res.success) {
+        return { success: false, error: res.error };
+      }
+      await refreshConversations();
+      return { success: true };
+    }
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conversationId
+          ? {
+              ...c,
+              lifecycleStatus: 'completed',
+              status: 'CLOSED',
+              completedBy: currentUser?.id || 'usr-current',
+              completedAt: new Date().toISOString(),
+              closedAt: new Date().toISOString(),
+              closureReason: notes || c.completionProposalReason || 'Case completed and confirmed by participants',
+              completionNotes: notes,
+              updatedAt: new Date().toISOString(),
+            }
+          : c
+      )
+    );
+    return { success: true };
+  }, [dataSource, currentUser?.id, refreshConversations]);
+
+  const rejectCaseCompletion = useCallback(async (
+    conversationId: string,
+    reason?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      const res = await caseLifecycleService.rejectCaseCompletion(conversationId, reason);
+      if (!res.success) {
+        return { success: false, error: res.error };
+      }
+      await refreshConversations();
+      return { success: true };
+    }
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conversationId
+          ? {
+              ...c,
+              lifecycleStatus: 'active',
+              completionProposedBy: undefined,
+              completionProposedAt: undefined,
+              completionProposalReason: undefined,
+              updatedAt: new Date().toISOString(),
+            }
+          : c
+      )
+    );
+    return { success: true };
+  }, [dataSource, refreshConversations]);
+
+  const coordinatorResolveCase = useCallback(async (
+    conversationId: string,
+    reason: string,
+    notes?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!reason || reason.trim().length < 5) {
+      return { success: false, error: 'A mandatory resolution reason of at least 5 characters is required.' };
+    }
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      const res = await caseLifecycleService.coordinatorResolveCase(conversationId, reason, notes);
+      if (!res.success) {
+        return { success: false, error: res.error };
+      }
+      await refreshConversations();
+      return { success: true };
+    }
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conversationId
+          ? {
+              ...c,
+              lifecycleStatus: 'completed',
+              status: 'CLOSED',
+              resolvedByCoordinator: currentUser?.id || 'usr-coordinator',
+              coordinatorResolutionReason: reason.trim(),
+              completedBy: currentUser?.id || 'usr-coordinator',
+              completedAt: new Date().toISOString(),
+              closedAt: new Date().toISOString(),
+              closureReason: reason.trim(),
+              completionNotes: notes,
+              updatedAt: new Date().toISOString(),
+            }
+          : c
+      )
+    );
+    return { success: true };
+  }, [dataSource, currentUser?.id, refreshConversations]);
+
+  const toggleConversationArchive = useCallback(async (
+    conversationId: string,
+    isArchived: boolean
+  ): Promise<{ success: boolean; error?: string }> => {
+    const conv = conversations.find((c) => c.id === conversationId);
+    if (isArchived && conv && conv.lifecycleStatus !== 'completed') {
+      return { success: false, error: 'Cannot archive an active emergency case. Complete the case before archiving.' };
+    }
+
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      const res = await caseLifecycleService.toggleConversationArchive(conversationId, isArchived);
+      if (!res.success) {
+        return { success: false, error: res.error };
+      }
+      await refreshConversations();
+      return { success: true };
+    }
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conversationId
+          ? {
+              ...c,
+              isArchived,
+              archivedAt: isArchived ? new Date().toISOString() : undefined,
+            }
+          : c
+      )
+    );
+    return { success: true };
+  }, [conversations, dataSource, refreshConversations]);
+
+  const toggleConversationMute = useCallback(async (
+    conversationId: string,
+    isMuted: boolean
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      const res = await caseLifecycleService.toggleConversationMute(conversationId, isMuted);
+      if (!res.success) {
+        return { success: false, error: res.error };
+      }
+      await refreshConversations();
+      return { success: true };
+    }
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conversationId
+          ? {
+              ...c,
+              isMuted,
+              mutedAt: isMuted ? new Date().toISOString() : undefined,
+            }
+          : c
+      )
+    );
+    return { success: true };
+  }, [dataSource, refreshConversations]);
+
+  const getConversationCallHistory = useCallback(async (
+    conversationId: string
+  ): Promise<CallHistoryRecord[]> => {
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      const res = await caseLifecycleService.getConversationCallHistory(conversationId);
+      if (res.success && res.data) {
+        return res.data;
+      }
+    }
+
+    return callSessions
+      .filter((s) => s.conversationId === conversationId)
+      .map((s) => ({
+        id: s.id,
+        conversationId: s.conversationId,
+        requestId: s.requestId,
+        callerId: s.callerId,
+        receiverId: s.receiverId,
+        callType: s.callType,
+        status: s.status,
+        startedAt: s.startedAt,
+        endedAt: s.endedAt,
+        durationSeconds: s.durationSeconds || 0,
+        endReason: s.endReason,
+      }));
+  }, [dataSource, callSessions]);
 
   // Atomic Donor Assignment (Safe, conflict-resistant & DB-backed)
   const assignDonorToRequest = async (
@@ -3644,6 +3877,13 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         incomingCallSession,
         getDonorTrackingList,
         getConversationsForUser,
+        proposeCaseCompletion,
+        confirmCaseCompletion,
+        rejectCaseCompletion,
+        coordinatorResolveCase,
+        toggleConversationArchive,
+        toggleConversationMute,
+        getConversationCallHistory,
       }}
     >
       {children}

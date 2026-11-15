@@ -7,11 +7,14 @@ import {
   FileText,
   CloudOff,
   Sparkles,
+  Lock,
 } from 'lucide-react';
 
 interface MessageComposerProps {
   onSendMessage: (content: string, attachments?: MessageAttachment[]) => Promise<void>;
   isOffline?: boolean;
+  isReadOnly?: boolean;
+  readOnlyMessage?: string;
 }
 
 const QUICK_RESPONSES = [
@@ -24,11 +27,27 @@ const QUICK_RESPONSES = [
 export const MessageComposer: React.FC<MessageComposerProps> = ({
   onSendMessage,
   isOffline = false,
+  isReadOnly = false,
+  readOnlyMessage,
 }) => {
   const [text, setText] = useState('');
   const [selectedFile, setSelectedFile] = useState<MessageAttachment | null>(null);
   const [isSending, setIsSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (isReadOnly) {
+    return (
+      <div className="border-t border-[#E6E9E7] bg-[#F8F9F8] p-3.5 sm:p-4 text-center">
+        <div className="flex items-center justify-center gap-2 text-xs font-semibold text-[#69716F]">
+          <Lock className="w-4 h-4 text-[#69716F] shrink-0" />
+          <span>
+            {readOnlyMessage ||
+              'This emergency coordination case is completed. Chat history is preserved in read-only mode.'}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();

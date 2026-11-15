@@ -6,10 +6,11 @@ import {
   CheckCircle2,
   Clock,
   Shield,
-  Radio,
-  User,
-  Activity,
-  Droplet,
+  Volume2,
+  VolumeX,
+  Archive,
+  ArchiveRestore,
+  AlertCircle,
 } from 'lucide-react';
 
 interface ConversationSidebarProps {
@@ -18,6 +19,8 @@ interface ConversationSidebarProps {
   onSelectConversation: (id: string) => void;
   currentRole: UserRole;
   currentUserId?: string;
+  onToggleArchive?: (id: string, isArchived: boolean) => void;
+  onToggleMute?: (id: string, isMuted: boolean) => void;
 }
 
 function getInitials(name?: string, fallback = 'CL'): string {
@@ -47,10 +50,33 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   onSelectConversation,
   currentRole,
   currentUserId,
+  onToggleArchive,
+  onToggleMute,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'archived'>('active');
 
-  const filteredConversations = conversations.filter((conv) => {
+  // Counts across categories
+  const activeCount = conversations.filter(
+    (c) => c.lifecycleStatus !== 'completed' && !c.isArchived
+  ).length;
+  const completedCount = conversations.filter(
+    (c) => c.lifecycleStatus === 'completed' && !c.isArchived
+  ).length;
+  const archivedCount = conversations.filter((c) => Boolean(c.isArchived)).length;
+
+  const tabFiltered = conversations.filter((conv) => {
+    if (activeTab === 'archived') {
+      return Boolean(conv.isArchived);
+    }
+    if (activeTab === 'completed') {
+      return conv.lifecycleStatus === 'completed' && !conv.isArchived;
+    }
+    // Default 'active'
+    return conv.lifecycleStatus !== 'completed' && !conv.isArchived;
+  });
+
+  const displayedConversations = tabFiltered.filter((conv) => {
     const term = searchTerm.toLowerCase();
     const donorName = conv.donorName || '';
     const refCode = conv.referenceCode || '';
@@ -89,8 +115,70 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           </div>
 
           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#F0F2F0] text-[#202322] border border-[#E6E9E7]">
-            {filteredConversations.length}
+            {tabFiltered.length}
           </span>
+        </div>
+
+        {/* 3-View Filter Tabs: Active Chats / Completed / Archived */}
+        <div className="grid grid-cols-3 gap-1 p-1 bg-[#F0F2F0] rounded-lg text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => setActiveTab('active')}
+            className={`py-1.5 px-2 rounded-md transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'active'
+                ? 'bg-white text-[#202322] shadow-xs font-bold'
+                : 'text-[#69716F] hover:text-[#202322]'
+            }`}
+          >
+            <span>Active</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                activeTab === 'active' ? 'bg-brand/10 text-brand' : 'bg-black/5 text-[#69716F]'
+              }`}
+            >
+              {activeCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('completed')}
+            className={`py-1.5 px-2 rounded-md transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'completed'
+                ? 'bg-white text-[#202322] shadow-xs font-bold'
+                : 'text-[#69716F] hover:text-[#202322]'
+            }`}
+          >
+            <span>Completed</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                activeTab === 'completed'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-black/5 text-[#69716F]'
+              }`}
+            >
+              {completedCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('archived')}
+            className={`py-1.5 px-2 rounded-md transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'archived'
+                ? 'bg-white text-[#202322] shadow-xs font-bold'
+                : 'text-[#69716F] hover:text-[#202322]'
+            }`}
+          >
+            <span>Archived</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                activeTab === 'archived'
+                  ? 'bg-slate-200 text-slate-700'
+                  : 'bg-black/5 text-[#69716F]'
+              }`}
+            >
+              {archivedCount}
+            </span>
+          </button>
         </div>
 
         {/* Search */}
@@ -100,7 +188,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search channels, donors, requests..."
+            placeholder={`Search ${activeTab} channels, donors...`}
             className="w-full pl-8 pr-3 py-1.5 text-xs bg-[#F8F9F8] border border-[#E6E9E7] rounded-lg text-[#202322] placeholder:text-[#69716F] focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand transition-colors"
           />
         </div>
@@ -108,99 +196,191 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
       {/* Conversations List */}
       <div className="flex-1 overflow-y-auto divide-y divide-[#E6E9E7]">
-        {filteredConversations.length === 0 ? (
+        {displayedConversations.length === 0 ? (
           <div className="p-6 text-center space-y-2">
             <div className="w-10 h-10 rounded-full bg-[#F0F2F0] text-[#69716F] flex items-center justify-center mx-auto">
               <MessageSquare className="w-5 h-5" />
             </div>
-            <p className="text-xs font-bold text-[#202322]">No Active Channels</p>
+            <p className="text-xs font-bold text-[#202322]">
+              {activeTab === 'active'
+                ? 'No Active Channels'
+                : activeTab === 'completed'
+                ? 'No Completed Cases'
+                : 'No Archived Channels'}
+            </p>
             <p className="text-[11px] text-[#69716F] max-w-xs mx-auto leading-relaxed">
-              {currentRole === 'donor'
-                ? 'When you accept an emergency dispatch call, your private coordination channel with the attendant will appear here.'
-                : 'Direct messaging unlocks automatically as soon as a donor accepts your emergency call.'}
+              {activeTab === 'active'
+                ? currentRole === 'donor'
+                  ? 'When you accept an emergency dispatch call, your active coordination channel will appear here.'
+                  : 'Active channels appear as soon as a donor accepts your emergency call.'
+                : activeTab === 'completed'
+                ? 'Resolved cases with confirmed completion or coordinator resolution appear here in preserved read-only mode.'
+                : 'Archived cases you have personally stashed appear here. Unresolved active emergencies cannot be archived.'}
             </p>
           </div>
         ) : (
-          filteredConversations.map((conv) => {
+          displayedConversations.map((conv) => {
             const isSelected = conv.id === activeConversationId;
 
             // Participant Identity Logic:
             // For donor: other party is the requester (patient/attendant)
             // For patient: other party is the donor
-            const isUserDonor = currentRole === 'donor' || (Boolean(currentUserId) && conv.donorId === currentUserId);
+            const isUserDonor =
+              currentRole === 'donor' ||
+              (Boolean(currentUserId) && conv.donorId === currentUserId);
             const otherPartyName = isUserDonor
-              ? (conv.requesterName || 'Emergency Attendant')
-              : (conv.donorName || 'Volunteer Donor');
+              ? conv.requesterName || 'Emergency Attendant'
+              : conv.donorName || 'Volunteer Donor';
             const initials = getInitials(otherPartyName, isUserDonor ? 'PA' : 'VD');
             const refDisplay = conv.referenceCode ? `#${conv.referenceCode}` : 'Direct Channel';
             const roleSubtitle = isUserDonor
               ? `Attendant • ${refDisplay}`
               : `Donor (${conv.donorBloodGroup || '—'}) • ${refDisplay}`;
 
+            const isPending = conv.lifecycleStatus === 'completion_pending';
+            const isCompleted = conv.lifecycleStatus === 'completed';
+
             return (
-              <button
+              <div
                 key={conv.id}
-                type="button"
-                onClick={() => onSelectConversation(conv.id)}
-                className={`w-full p-4 text-left transition-colors flex items-start gap-3 relative group ${
+                className={`relative group transition-colors ${
                   isSelected
                     ? 'bg-brand/5 border-l-4 border-l-brand'
                     : 'hover:bg-[#F8F9F8]'
                 }`}
               >
-                {/* Avatar with Status indicator */}
-                <div className="relative shrink-0">
-                  <div
-                    className={`w-10 h-10 rounded-full font-bold flex items-center justify-center text-xs tracking-wider border shadow-xs ${
-                      isUserDonor
-                        ? 'bg-slate-100 text-slate-700 border-slate-200'
-                        : 'bg-brand-light text-brand border-brand/20'
-                    }`}
-                  >
-                    {isUserDonor ? initials : conv.donorBloodGroup || initials}
+                <button
+                  type="button"
+                  onClick={() => onSelectConversation(conv.id)}
+                  className="w-full p-4 text-left flex items-start gap-3"
+                >
+                  {/* Avatar with Status indicator */}
+                  <div className="relative shrink-0">
+                    <div
+                      className={`w-10 h-10 rounded-full font-bold flex items-center justify-center text-xs tracking-wider border shadow-xs ${
+                        isUserDonor
+                          ? 'bg-slate-100 text-slate-700 border-slate-200'
+                          : 'bg-brand-light text-brand border-brand/20'
+                      }`}
+                    >
+                      {isUserDonor ? initials : conv.donorBloodGroup || initials}
+                    </div>
+                    {isCompleted ? (
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-600 border-2 border-white flex items-center justify-center"
+                        title="Completed Case"
+                      >
+                        <CheckCircle2 className="w-2.5 h-2.5 text-white" />
+                      </span>
+                    ) : isPending ? (
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-white flex items-center justify-center"
+                        title="Completion Pending"
+                      >
+                        <Clock className="w-2.5 h-2.5 text-white" />
+                      </span>
+                    ) : (
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center"
+                        title="Active secure channel"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                      </span>
+                    )}
                   </div>
-                  <span
-                    className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center"
-                    title="Active secure channel"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                  </span>
+
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h3 className="text-xs font-bold text-[#202322] truncate group-hover:text-brand transition-colors">
+                          {otherPartyName}
+                        </h3>
+                        {conv.isMuted && (
+                          <span title="Notifications Muted" className="inline-flex items-center">
+                            <VolumeX className="w-3 h-3 text-[#69716F] shrink-0" />
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-[#69716F] shrink-0 font-medium">
+                        {formatConversationTime(conv.lastMessageTimestamp || conv.updatedAt)}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] font-medium text-[#69716F] truncate">
+                      {roleSubtitle}
+                    </p>
+
+                    <p className="text-xs text-[#202322]/80 truncate font-normal">
+                      {conv.lastMessage || 'Channel activated. Coordinate dispatch.'}
+                    </p>
+
+                    <div className="flex items-center justify-between gap-1 pt-0.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono text-[9px] font-bold bg-[#F0F2F0] text-[#202322] px-1.5 py-0.5 rounded border border-[#E6E9E7]">
+                          {conv.referenceCode || 'Direct'}
+                        </span>
+                        <span className="text-[10px] text-[#69716F] truncate">
+                          {conv.hospitalName || 'Emergency Hospital'}
+                        </span>
+                      </div>
+
+                      {/* Case Status Pill */}
+                      {isCompleted ? (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                          <span>Completed</span>
+                        </span>
+                      ) : isPending ? (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                          <Clock className="w-2.5 h-2.5 text-amber-600" />
+                          <span>Pending</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span>Active</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {conv.unreadCount > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-brand text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-1 shadow-xs">
+                      {conv.unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Per-User Quick Actions: Archive & Mute */}
+                <div className="absolute right-2 top-2 hidden group-hover:flex items-center gap-1 bg-white/90 backdrop-blur-xs p-1 rounded-md border border-[#E6E9E7] shadow-xs">
+                  {onToggleMute && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleMute(conv.id, !conv.isMuted);
+                      }}
+                      className="p-1 text-[#69716F] hover:text-[#202322] rounded hover:bg-[#F0F2F0] transition-colors"
+                      title={conv.isMuted ? 'Unmute Notifications' : 'Mute Notifications'}
+                    >
+                      {conv.isMuted ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
+                    </button>
+                  )}
+                  {onToggleArchive && isCompleted && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleArchive(conv.id, !conv.isArchived);
+                      }}
+                      className="p-1 text-[#69716F] hover:text-[#202322] rounded hover:bg-[#F0F2F0] transition-colors"
+                      title={conv.isArchived ? 'Restore from Archive' : 'Archive Completed Chat'}
+                    >
+                      {conv.isArchived ? <ArchiveRestore className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
+                    </button>
+                  )}
                 </div>
-
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-center justify-between gap-1">
-                    <h3 className="text-xs font-bold text-[#202322] truncate group-hover:text-brand transition-colors">
-                      {otherPartyName}
-                    </h3>
-                    <span className="text-[10px] text-[#69716F] shrink-0 font-medium">
-                      {formatConversationTime(conv.lastMessageTimestamp || conv.updatedAt)}
-                    </span>
-                  </div>
-
-                  <p className="text-[11px] font-medium text-[#69716F] truncate">
-                    {roleSubtitle}
-                  </p>
-
-                  <p className="text-xs text-[#202322]/80 truncate font-normal">
-                    {conv.lastMessage || 'Channel activated. Coordinate dispatch.'}
-                  </p>
-
-                  <div className="flex items-center gap-1.5 pt-0.5">
-                    <span className="font-mono text-[9px] font-bold bg-[#F0F2F0] text-[#202322] px-1.5 py-0.5 rounded border border-[#E6E9E7]">
-                      {conv.referenceCode || 'Direct'}
-                    </span>
-                    <span className="text-[10px] text-[#69716F] truncate">
-                      {conv.hospitalName || 'Emergency Hospital'}
-                    </span>
-                  </div>
-                </div>
-
-                {conv.unreadCount > 0 && (
-                  <span className="w-4 h-4 rounded-full bg-brand text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-1 shadow-xs">
-                    {conv.unreadCount}
-                  </span>
-                )}
-              </button>
+              </div>
             );
           })
         )}
