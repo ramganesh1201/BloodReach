@@ -190,8 +190,8 @@ export const BeforeAcceptanceTracker: React.FC<BeforeAcceptanceTrackerProps> = (
             </h3>
             <p className="text-xs text-amber-800/90 leading-relaxed max-w-3xl">
               To preserve emergency focus and prevent distraction during urgent triage, CareLoop opens dedicated,
-              private 1-on-1 coordination channels as soon as a medically cleared donor accepts the call. Track real-time
-              notification delivery below.
+              private 1-on-1 coordination channels as soon as a prospective donor candidate accepts the call.
+              Physical screening and laboratory cross-matching remain mandatory at the hospital transfusion facility.
             </p>
           </div>
         </div>

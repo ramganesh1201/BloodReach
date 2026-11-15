@@ -362,9 +362,9 @@ export function findPotentialResponders(
 
     let matchReason: string;
     if (compCheck.isExact) {
-      matchReason = `Exact match for ${request.bloodGroup} ${request.component} • ~${dist.toFixed(1)} km away`;
+      matchReason = `Exact match for ${request.bloodGroup} ${request.component} • ~${dist.toFixed(1)} km away (hospital cross-match mandatory)`;
     } else {
-      matchReason = `Clinically compatible donor (${donor.bloodGroup}) for ${request.component} • ~${dist.toFixed(1)} km away`;
+      matchReason = `Potential candidate donor (${donor.bloodGroup}) for ${request.component} • ~${dist.toFixed(1)} km away (hospital cross-match mandatory)`;
     }
 
     matches.push({
@@ -374,7 +374,7 @@ export function findPotentialResponders(
       compatibilityTier: compCheck.tier,
       approxDistanceKm: dist,
       eligibility,
-      disclaimer: 'Potential candidate identified. Blood safety testing, Hb level, and final cross-match verification must be conducted by blood centre pathologists.',
+      disclaimer: 'Candidate donor identified for emergency outreach. Physical screening, vital checks (Hb >= 12.5 g/dL), and mandatory hospital laboratory cross-matching must be completed by accredited blood centre pathologists prior to unit issue.',
     });
   }
 

@@ -454,7 +454,7 @@ export const DonorView: React.FC = () => {
           icon: Heart,
         }}
         title="Volunteer Donor Emergency Hub"
-        description="Review clinically compatible emergency requests in your area, manage your live dispatch readiness, and view confirmed hospital commitments."
+        description="Review candidate emergency requests matching your blood profile, manage your live dispatch readiness, and view confirmed hospital commitments."
         statusBadge={{
           label: activeDonor.isAvailable ? 'Ready for Dispatch' : 'Dispatch Paused',
           live: activeDonor.isAvailable && !isOffline,

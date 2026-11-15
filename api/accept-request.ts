@@ -114,6 +114,20 @@ function getServerSupabaseClient(): SupabaseClient | null {
 }
 
 function parseRequestBody(req: IncomingMessage): Promise<any> {
+  const anyReq = req as any;
+  if (anyReq.body !== undefined && anyReq.body !== null) {
+    if (typeof anyReq.body === 'object') {
+      return Promise.resolve(anyReq.body);
+    }
+    if (typeof anyReq.body === 'string' && anyReq.body.trim().length > 0) {
+      try {
+        return Promise.resolve(JSON.parse(anyReq.body));
+      } catch {
+        // continue to stream fallback
+      }
+    }
+  }
+
   return new Promise((resolve, reject) => {
     let raw = '';
     let bytes = 0;
