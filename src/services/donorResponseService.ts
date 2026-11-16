@@ -474,18 +474,34 @@ export async function reviewDonorMedicalClearance(
 
 /**
  * Fetch Pending Medical Clearances (Authorized Clinical/Admin action)
+ * Returns mapped Donor domain models from authoritative database RPC or table query.
  */
 export async function getPendingMedicalClearances(): Promise<{
   success: boolean;
-  data?: any[];
+  data?: Donor[];
   error?: string;
 }> {
   try {
+    // 1. Primary: Authoritative RPC get_pending_medical_clearances
     const { data, error } = await supabase.rpc('get_pending_medical_clearances');
-    if (error) {
-      return { success: false, error: error.message };
+    if (!error && data && Array.isArray(data)) {
+      return { success: true, data: data.map(mapDbToDonor) };
     }
-    return { success: true, data: data || [] };
+
+    // 2. Fallback: Direct table query for authorized clinical staff and administrators
+    const { data: tableData, error: tableError } = await supabase
+      .from('donors')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!tableError && tableData && Array.isArray(tableData)) {
+      return { success: true, data: tableData.map(mapDbToDonor) };
+    }
+
+    return {
+      success: false,
+      error: error?.message || tableError?.message || 'Failed to load medical clearance queue.',
+    };
   } catch (err: any) {
     return {
       success: false,

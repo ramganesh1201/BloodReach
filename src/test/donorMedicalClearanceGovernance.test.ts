@@ -227,7 +227,7 @@ describe('CareLoop — Donor Medical Clearance Governance & Structured Error Sui
 
       expect(res.success).toBe(true);
       expect(res.data).toHaveLength(1);
-      expect(res.data?.[0].full_name).toBe('Test Donor A');
+      expect(res.data?.[0].fullName).toBe('Test Donor A');
     });
 
     it('2.6 requestMedicalClearanceReview handles REVIEW_ALREADY_PENDING idempotently', async () => {

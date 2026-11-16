@@ -603,7 +603,7 @@ interface BloodStoreContextType {
   requestClinicalCorrection: (donorId: string, request: { field: string; requestedValue: string; reason: string; certificateNotes?: string }) => Promise<{ success: boolean; message: string; error?: string }>;
   requestMedicalClearanceReview: (notes?: string) => Promise<{ success: boolean; code?: string; message?: string; error?: string }>;
   reviewDonorMedicalClearance: (donorId: string, decision: 'APPROVED' | 'REJECTED' | 'DEFERRED', reason: string, notes?: string, deferralUntil?: string) => Promise<{ success: boolean; decision?: string; message?: string; error?: string }>;
-  getPendingMedicalClearances: () => Promise<{ success: boolean; data?: any[]; error?: string }>;
+  getPendingMedicalClearances: () => Promise<{ success: boolean; data?: Donor[]; error?: string }>;
 
   // Blood Bank Operations
   updateInventory: (centreId: string, bloodGroup: BloodGroup, component: BloodComponent, newUnits: number) => Promise<void>;
@@ -1078,6 +1078,13 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const refreshDonorProfile = useCallback(async () => {
     if (dataSource !== 'database' || !isSupabaseConfigured || !currentUser?.id) return;
     try {
+      if (['coordinator', 'admin'].includes(currentRole) || currentUser?.role === 'admin' || currentUser?.role === 'coordinator') {
+        const queueRes = await donorResponseService.getPendingMedicalClearances();
+        if (queueRes.success && queueRes.data && queueRes.data.length > 0) {
+          setDonors(queueRes.data);
+          return;
+        }
+      }
       const donorRes = await donorResponseService.getDonorProfileByUserId(currentUser.id);
       if (donorRes.success && donorRes.data) {
         const userDonor = donorRes.data;
@@ -1087,7 +1094,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (err: any) {
       console.warn('[CareLoop Store] Failed to refresh donor profile from DB:', err?.message);
     }
-  }, [dataSource, currentUser?.id]);
+  }, [dataSource, currentUser?.id, currentUser?.role, currentRole]);
 
   useEffect(() => {
     if (currentUser?.id && dataSource === 'database') {
@@ -2198,7 +2205,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const getPendingMedicalClearances = useCallback(async (): Promise<{
     success: boolean;
-    data?: any[];
+    data?: Donor[];
     error?: string;
   }> => {
     if (dataSource === 'database' && isSupabaseConfigured) {
