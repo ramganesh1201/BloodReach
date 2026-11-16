@@ -386,14 +386,21 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (rpcData && typeof rpcData === 'object') {
       if (rpcData.success) {
         const conversationId = rpcData.conversation_id;
+        const assignmentId = rpcData.assignment_id || null;
 
-        // Fetch assignment ID for contract completeness
-        const { data: assignRow } = await supabase
-          .from('donor_assignments')
-          .select('id')
-          .eq('request_id', resolvedRequestId)
-          .eq('donor_id', targetDonorId || donorRow?.id)
-          .maybeSingle();
+        // Fallback fetch assignment ID if RPC did not provide it
+        let resolvedAssignmentId = assignmentId;
+        if (!resolvedAssignmentId) {
+          const { data: assignRow } = await supabase
+            .from('donor_assignments')
+            .select('id')
+            .eq('request_id', resolvedRequestId)
+            .eq('donor_id', targetDonorId || donorRow?.id)
+            .maybeSingle();
+          if (assignRow?.id) {
+            resolvedAssignmentId = assignRow.id;
+          }
+        }
 
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
@@ -401,7 +408,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           JSON.stringify({
             success: true,
             requestId: rpcData.request_id || resolvedRequestId,
-            assignmentId: assignRow?.id || null,
+            assignmentId: resolvedAssignmentId,
             conversationId,
             conversationRoute: `/communication?conversationId=${conversationId}`,
             donorName: rpcData.donor_name || donorRow?.full_name || 'Volunteer Donor',

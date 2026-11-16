@@ -2985,9 +2985,24 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const conv = conversations.find((c) => c.id === conversationId);
     if (!conv) return { success: false, messageId: '' };
 
-    const senderRole = currentRole;
-    const senderId = currentUser?.id || (senderRole === 'donor' ? conv.donorId : conv.requesterId);
-    const senderName = currentUser?.fullName || (senderRole === 'donor' ? conv.donorName : conv.requesterName);
+    const isDonorInConv =
+      currentRole === 'donor' ||
+      (Boolean(userDonorProfile?.id) && conv.donorId === userDonorProfile?.id) ||
+      (Boolean(currentUser?.id) && (
+        conv.donorId === currentUser?.id ||
+        (conv as any)?.donorProfileId === currentUser?.id
+      )) ||
+      (Boolean(currentUser?.id) && Boolean(userDonorProfile) && conv.requesterId !== currentUser?.id);
+
+    const senderRole: UserRole =
+      currentRole === 'coordinator' || currentRole === 'admin'
+        ? currentRole
+        : isDonorInConv
+        ? 'donor'
+        : 'patient';
+
+    const senderId = currentUser?.id || (isDonorInConv ? conv.donorId : conv.requesterId);
+    const senderName = currentUser?.fullName || (isDonorInConv ? conv.donorName : conv.requesterName);
     const messageId = `cmsg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const nowIso = new Date().toISOString();
 
@@ -3136,9 +3151,22 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const conv = conversations.find((c) => c.id === conversationId);
     if (!conv) return;
 
-    const actorRole = currentRole === 'donor' ? 'Donor' : currentRole === 'coordinator' ? 'Coordinator' : 'Requester';
-    const actorId = currentUser?.id || (currentRole === 'donor' ? conv.donorId : conv.requesterId);
-    const actorName = currentUser?.fullName || (currentRole === 'donor' ? conv.donorName : conv.requesterName);
+    const isDonorInConv =
+      currentRole === 'donor' ||
+      (Boolean(userDonorProfile?.id) && conv.donorId === userDonorProfile?.id) ||
+      (Boolean(currentUser?.id) && (
+        conv.donorId === currentUser?.id ||
+        (conv as any)?.donorProfileId === currentUser?.id
+      )) ||
+      (Boolean(currentUser?.id) && Boolean(userDonorProfile) && conv.requesterId !== currentUser?.id);
+
+    const actorRole = currentRole === 'coordinator' || currentRole === 'admin'
+      ? 'Coordinator'
+      : isDonorInConv
+      ? 'Donor'
+      : 'Requester';
+    const actorId = currentUser?.id || (isDonorInConv ? conv.donorId : conv.requesterId);
+    const actorName = currentUser?.fullName || (isDonorInConv ? conv.donorName : conv.requesterName);
     const nowIso = new Date().toISOString();
 
     const newEvent: CoordinationEvent = {
@@ -3238,11 +3266,20 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const conv = conversations.find((c) => c.id === conversationId);
     if (!conv) return { success: false, error: 'Conversation channel not found.' };
 
-    const callerId = currentUser?.id || (currentRole === 'donor' ? conv.donorId : conv.requesterId);
-    const callerName = currentUser?.fullName || (currentRole === 'donor' ? conv.donorName : conv.requesterName);
-    const receiverId = currentRole === 'donor' ? conv.requesterId : conv.donorId;
-    const receiverName = currentRole === 'donor' ? conv.requesterName : conv.donorName;
-    const callerRole = currentRole;
+    const isDonorInConv =
+      currentRole === 'donor' ||
+      (Boolean(userDonorProfile?.id) && conv.donorId === userDonorProfile?.id) ||
+      (Boolean(currentUser?.id) && (
+        conv.donorId === currentUser?.id ||
+        (conv as any)?.donorProfileId === currentUser?.id
+      )) ||
+      (Boolean(currentUser?.id) && Boolean(userDonorProfile) && conv.requesterId !== currentUser?.id);
+
+    const callerId = currentUser?.id || (isDonorInConv ? conv.donorId : conv.requesterId);
+    const callerName = currentUser?.fullName || (isDonorInConv ? conv.donorName : conv.requesterName);
+    const receiverId = isDonorInConv ? conv.requesterId : conv.donorId;
+    const receiverName = isDonorInConv ? conv.requesterName : conv.donorName;
+    const callerRole: UserRole = isDonorInConv ? 'donor' : currentRole;
 
     if (activeCallSession && ['RINGING', 'ACCEPTED', 'CONNECTED'].includes(activeCallSession.status)) {
       setCallError('A call is already active or in progress.');

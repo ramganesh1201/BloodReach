@@ -52,6 +52,7 @@ export const CommunicationView: React.FC = () => {
     escalateRequest,
     currentRole,
     currentUser,
+    userDonorProfile,
     isOffline,
     refreshConversations,
     proposeCaseCompletion,
@@ -157,10 +158,16 @@ export const CommunicationView: React.FC = () => {
     }
   }, [activeConversationId, markConversationAsRead]);
 
-  // Participant Identity Logic
+  // Participant Identity Logic:
+  // Dynamically determine whether current user is the donor or requester in this conversation
   const isUserDonor =
     currentRole === 'donor' ||
-    (Boolean(currentUser?.id) && activeConversation?.donorId === currentUser?.id);
+    (Boolean(userDonorProfile?.id) && activeConversation?.donorId === userDonorProfile?.id) ||
+    (Boolean(currentUser?.id) && (
+      activeConversation?.donorId === currentUser?.id ||
+      (activeConversation as any)?.donorProfileId === currentUser?.id
+    )) ||
+    (Boolean(currentUser?.id) && Boolean(userDonorProfile) && activeConversation?.requesterId !== currentUser?.id);
   const activeOtherPartyName = activeConversation
     ? isUserDonor
       ? activeConversation.requesterName || 'Emergency Attendant'
@@ -268,8 +275,10 @@ export const CommunicationView: React.FC = () => {
   };
 
   const isBeforeAcceptance = Boolean(
-    activeRequest &&
-      currentRole !== 'donor' &&
+    !urlConversationId &&
+      !activeConversation &&
+      activeRequest &&
+      !isUserDonor &&
       acceptedDonorsForRequest.length === 0 &&
       conversationsForActiveRequest.length === 0
   );
