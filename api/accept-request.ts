@@ -359,7 +359,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (rpcError) {
       console.warn('[accept-request] Database RPC error:', rpcError.message);
       const msg = rpcError.message || 'Database error during acceptance.';
-      let statusCode = 400;
+      let statusCode = 500;
       let errorCode = 'INTERNAL_SERVER_ERROR';
       let errorDetails: string | undefined = undefined;
       let actionRequired: string | undefined = undefined;

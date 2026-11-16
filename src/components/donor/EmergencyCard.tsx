@@ -12,6 +12,7 @@ interface EmergencyCardProps {
   errorMessage?: string | null;
   errorCode?: string | null;
   isMedicallyCleared?: boolean;
+  clearanceStatus?: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'DEFERRED' | string;
   onRespond: (status: 'ACCEPTED' | 'DECLINED') => void;
   onRequestClearanceReview?: () => void;
 }
@@ -25,6 +26,7 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
   errorMessage,
   errorCode,
   isMedicallyCleared = true,
+  clearanceStatus,
   onRespond,
   onRequestClearanceReview,
 }) => {
@@ -94,7 +96,16 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
             </span>
             {!isMedicallyCleared && (
               <span className="text-[10px] bg-warning-light text-warning-dark font-bold px-2 py-0.5 rounded-md border border-warning-border">
-                Clearance Pending
+                {clearanceStatus === 'DEFERRED'
+                  ? 'Medical Deferral Active'
+                  : clearanceStatus === 'REJECTED'
+                  ? 'Clearance Declined'
+                  : 'Clinical Review Pending'}
+              </span>
+            )}
+            {isMedicallyCleared && (
+              <span className="text-[10px] bg-success-light text-success font-bold px-2 py-0.5 rounded-md border border-success-border">
+                Medical Clearance Approved
               </span>
             )}
           </div>
@@ -134,7 +145,7 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
           <span>Why you match this request:</span>
         </div>
         <p className="leading-relaxed">
-          Compatible for {request.bloodGroup} {request.component} • Proximity (~{approxDistanceKm.toFixed(1)} km) within active Level {request.escalationLevel} search radius • Medically eligible with no active deferral period.
+          Compatible for {request.bloodGroup} {request.component} • Proximity (~{approxDistanceKm.toFixed(1)} km) within active Level {request.escalationLevel} search radius • {isMedicallyCleared ? 'Medically cleared & interval-eligible.' : 'Emergency request acceptance is locked pending authorized clinical clearance review.'}
         </p>
       </div>
 
@@ -223,7 +234,7 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
               title="Clinical medical clearance review required before accepting emergency calls"
             >
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Clearance Review</span>
+              <span>Review Request Status</span>
             </button>
           ) : (
             <button
@@ -240,7 +251,7 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Accept Call</span>
+                  <span>Accept Request</span>
                 </>
               )}
             </button>

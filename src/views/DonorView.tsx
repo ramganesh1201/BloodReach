@@ -502,8 +502,16 @@ export const DonorView: React.FC = () => {
         title="Volunteer Donor Emergency Hub"
         description="Review candidate emergency requests matching your blood profile, manage your live dispatch readiness, and view confirmed hospital commitments."
         statusBadge={{
-          label: activeDonor.isAvailable ? 'Ready for Dispatch' : 'Dispatch Paused',
-          live: activeDonor.isAvailable && !isOffline,
+          label: !activeDonor.isMedicallyCleared || activeDonor.medicalClearanceStatus === 'PENDING_REVIEW'
+            ? 'Clinical Review Pending'
+            : activeDonor.medicalClearanceStatus === 'DEFERRED'
+            ? 'Medical Deferral Active'
+            : activeDonor.medicalClearanceStatus === 'REJECTED'
+            ? 'Medical Clearance Declined'
+            : activeDonor.isAvailable
+            ? 'Ready for Dispatch'
+            : 'Dispatch Paused',
+          live: activeDonor.isMedicallyCleared && activeDonor.isAvailable && !isOffline,
         }}
         actions={
           <button
@@ -530,9 +538,15 @@ export const DonorView: React.FC = () => {
                 <span className="font-bold text-sm text-app-text font-display truncate">
                   {activeDonor.fullName}
                 </span>
-                <span className="text-[9px] font-bold bg-success-light text-success border border-success-border px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0">
-                  <CheckCircle2 className="w-2.5 h-2.5" /> Registered
-                </span>
+                {activeDonor.isMedicallyCleared && activeDonor.medicalClearanceStatus === 'APPROVED' ? (
+                  <span className="text-[9px] font-bold bg-success-light text-success border border-success-border px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0">
+                    <CheckCircle2 className="w-2.5 h-2.5" /> Medical Cleared
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0">
+                    <AlertTriangle className="w-2.5 h-2.5" /> Review Pending
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-app-text-secondary truncate">
                 {activeDonor.city || 'Emergency Dispatch'} • {livesImpacted} Lives Saved
@@ -710,14 +724,22 @@ export const DonorView: React.FC = () => {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-bold text-app-text font-display">
-                      Medical Clearance Hold Active
+                      {activeDonor.medicalClearanceStatus === 'DEFERRED'
+                        ? 'Medical Deferral Active'
+                        : activeDonor.medicalClearanceStatus === 'REJECTED'
+                        ? 'Medical Clearance Declined'
+                        : 'Clinical Review Pending'}
                     </h3>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-warning-dark text-white uppercase font-mono">
                       {activeDonor.medicalClearanceStatus || 'PENDING_REVIEW'}
                     </span>
                   </div>
                   <p className="text-xs text-app-text-secondary leading-relaxed">
-                    To ensure recipient and donor safety under NBTC standards, emergency blood request acceptance is locked until an authorized clinical coordinator or blood bank specialist reviews and approves your clearance.
+                    {activeDonor.medicalClearanceStatus === 'DEFERRED'
+                      ? `Active clinical deferral period until ${activeDonor.deferralUntil || 'further evaluation'}. Emergency blood request acceptance is temporarily disabled.`
+                      : activeDonor.medicalClearanceStatus === 'REJECTED'
+                      ? `Clearance review was not approved: ${activeDonor.medicalReviewReason || 'Medical criteria not met'}. Emergency dispatch acceptance is disabled.`
+                      : 'To ensure recipient and donor safety under NBTC standards, emergency blood request acceptance is locked until an authorized clinical coordinator or blood bank specialist reviews and approves your clearance.'}
                   </p>
                   {activeDonor.medicalReviewNotes && (
                     <p className="text-[11px] text-app-text font-mono bg-app-surface/60 px-2 py-1 rounded border border-warning-border/50">
@@ -731,7 +753,7 @@ export const DonorView: React.FC = () => {
                 onClick={() => setIsReviewModalOpen(true)}
                 className="shrink-0 py-2 px-4 rounded-lg bg-warning-dark hover:bg-warning text-white text-xs font-bold transition-colors shadow-xs"
               >
-                Request Clinical Review
+                {activeDonor.medicalReviewRequestedAt ? 'Review Request Status' : 'Request Clinical Review'}
               </button>
             </div>
           )}
@@ -747,9 +769,23 @@ export const DonorView: React.FC = () => {
                     <h2 className="text-xl font-bold text-app-text font-display">
                       {activeDonor.fullName}
                     </h2>
-                    <span className="text-[10px] font-bold bg-success-light text-success border border-success-border px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> Verified Donor
-                    </span>
+                    {activeDonor.isMedicallyCleared && activeDonor.medicalClearanceStatus === 'APPROVED' ? (
+                      <span className="text-[10px] font-bold bg-success-light text-success border border-success-border px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Medical Clearance Approved
+                      </span>
+                    ) : activeDonor.medicalClearanceStatus === 'DEFERRED' ? (
+                      <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> Medical Deferral Active
+                      </span>
+                    ) : activeDonor.medicalClearanceStatus === 'REJECTED' ? (
+                      <span className="text-[10px] font-bold bg-red-50 text-emergency border border-red-200 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                        <XCircle className="w-3 h-3" /> Clearance Not Approved
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> Clinical Review Pending
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-app-text-secondary">
                     Registered in {activeDonor.city} • Standby Emergency Response Network
@@ -847,6 +883,7 @@ export const DonorView: React.FC = () => {
                     errorMessage={cardErrors[req.id]}
                     errorCode={cardErrorCodes[req.id]}
                     isMedicallyCleared={activeDonor.isMedicallyCleared}
+                    clearanceStatus={activeDonor.medicalClearanceStatus}
                     onRequestClearanceReview={() => setIsReviewModalOpen(true)}
                     onRespond={(status) => handleRespond(req.id, status)}
                   />
@@ -894,6 +931,7 @@ export const DonorView: React.FC = () => {
                     errorMessage={cardErrors[req.id]}
                     errorCode={cardErrorCodes[req.id]}
                     isMedicallyCleared={activeDonor.isMedicallyCleared}
+                    clearanceStatus={activeDonor.medicalClearanceStatus}
                     onRequestClearanceReview={() => setIsReviewModalOpen(true)}
                     onRespond={(status) => handleRespond(req.id, status)}
                   />
@@ -1710,17 +1748,82 @@ export const DonorView: React.FC = () => {
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-app-text-secondary leading-relaxed">
+            <div className="space-y-3.5 text-xs text-app-text-secondary leading-relaxed">
+              {/* 1. Authoritative Current Clearance State Card */}
+              <div className="p-3.5 rounded-xl bg-app-surface border border-app-border space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold text-app-text">Authoritative Clearance Status:</span>
+                  <span
+                    className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                      activeDonor.isMedicallyCleared && activeDonor.medicalClearanceStatus === 'APPROVED'
+                        ? 'bg-success-light text-success border-success-border'
+                        : activeDonor.medicalClearanceStatus === 'DEFERRED'
+                        ? 'bg-amber-50 text-amber-800 border-amber-300'
+                        : activeDonor.medicalClearanceStatus === 'REJECTED'
+                        ? 'bg-red-50 text-emergency border-red-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-300'
+                    }`}
+                  >
+                    {activeDonor.isMedicallyCleared && activeDonor.medicalClearanceStatus === 'APPROVED'
+                      ? 'Medical Clearance Approved'
+                      : activeDonor.medicalClearanceStatus === 'DEFERRED'
+                      ? 'Medical Deferral Active'
+                      : activeDonor.medicalClearanceStatus === 'REJECTED'
+                      ? 'Medical Clearance Declined'
+                      : 'Clinical Review Pending'}
+                  </span>
+                </div>
+
+                <div className="text-[11px] text-app-text-secondary space-y-1 pt-1 border-t border-app-border/60">
+                  {activeDonor.medicalReviewRequestedAt && (
+                    <p>
+                      <strong>Review Request Submitted:</strong>{' '}
+                      {new Date(activeDonor.medicalReviewRequestedAt).toLocaleString()}
+                    </p>
+                  )}
+                  {activeDonor.medicalReviewedAt && (
+                    <p>
+                      <strong>Clinically Evaluated:</strong>{' '}
+                      {new Date(activeDonor.medicalReviewedAt).toLocaleString()}
+                    </p>
+                  )}
+                  {activeDonor.medicalReviewDecision && (
+                    <p>
+                      <strong>Review Decision:</strong>{' '}
+                      <span className="font-bold text-app-text">{activeDonor.medicalReviewDecision}</span>
+                    </p>
+                  )}
+                  {activeDonor.medicalReviewReason && (
+                    <p>
+                      <strong>Authorized Reason:</strong> {activeDonor.medicalReviewReason}
+                    </p>
+                  )}
+                  {activeDonor.deferralUntil && (
+                    <p className="text-warning-dark font-semibold">
+                      <strong>Medical Deferral Until:</strong>{' '}
+                      {new Date(activeDonor.deferralUntil).toLocaleDateString()}
+                    </p>
+                  )}
+                  {activeDonor.medicalReviewNotes && (
+                    <p className="font-mono bg-app-muted/60 p-1.5 rounded">
+                      <strong>Current Notes:</strong> {activeDonor.medicalReviewNotes}
+                    </p>
+                  )}
+                </div>
+              </div>
+
               <div className="p-3 rounded-xl bg-info-light border border-info-border text-info text-xs space-y-1">
                 <strong className="block font-bold text-app-text">NBTC Clinical Safety Review Protocol</strong>
                 <p>
-                  CareLoop requires authorized clinical coordinator verification of whole blood donation intervals, minimum weight (≥45 kg), and medical criteria before emergency dispatch acceptance can be enabled.
+                  CareLoop requires authorized clinical coordinator verification of whole blood donation intervals, minimum weight (≥45 kg), and medical criteria before emergency dispatch acceptance can be enabled. Only accredited hospital administrators can approve clearance.
                 </p>
               </div>
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-app-text">
-                  Supplementary Notes or Transfusion Center Lab ID (Optional)
+                  {activeDonor.medicalReviewRequestedAt
+                    ? 'Update Supplementary Notes or Transfusion Center Lab ID'
+                    : 'Supplementary Notes or Transfusion Center Lab ID (Optional)'}
                 </label>
                 <textarea
                   rows={3}
@@ -1751,7 +1854,7 @@ export const DonorView: React.FC = () => {
                 onClick={() => setIsReviewModalOpen(false)}
                 className="py-2.5 px-4 rounded-xl border border-app-border text-app-text text-xs font-bold hover:bg-app-muted transition-colors"
               >
-                Cancel
+                Close
               </button>
               <button
                 type="button"
@@ -1765,7 +1868,11 @@ export const DonorView: React.FC = () => {
                     <span>Submitting...</span>
                   </>
                 ) : (
-                  <span>Submit Clearance Request</span>
+                  <span>
+                    {activeDonor.medicalReviewRequestedAt
+                      ? 'Update Review Notes'
+                      : 'Submit Clearance Request'}
+                  </span>
                 )}
               </button>
             </div>
