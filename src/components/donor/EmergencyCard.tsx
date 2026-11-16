@@ -215,24 +215,36 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
           >
             Decline
           </button>
-          <button
-            type="button"
-            disabled={isLoading}
-            onClick={() => onRespond('ACCEPTED')}
-            className="w-full py-2.5 px-4 rounded-lg bg-brand hover:bg-brand-dark disabled:opacity-50 text-white font-bold text-xs transition-colors shadow-xs flex items-center justify-center gap-1.5"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Confirming...</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Accept Call</span>
-              </>
-            )}
-          </button>
+          {!isMedicallyCleared ? (
+            <button
+              type="button"
+              onClick={onRequestClearanceReview}
+              className="w-full py-2.5 px-4 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs"
+              title="Clinical medical clearance review required before accepting emergency calls"
+            >
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Clearance Review</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={isLoading}
+              onClick={() => onRespond('ACCEPTED')}
+              className="w-full py-2.5 px-4 rounded-lg bg-brand hover:bg-brand-dark disabled:opacity-50 text-white font-bold text-xs transition-colors shadow-xs flex items-center justify-center gap-1.5"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Confirming...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Accept Call</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       )}
     </div>

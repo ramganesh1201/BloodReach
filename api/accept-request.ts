@@ -371,7 +371,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         statusCode = 404;
         errorCode = 'REQUEST_NOT_FOUND';
       } else if (msg.includes('medical clearance hold')) {
-        statusCode = 400;
+        statusCode = 403;
         errorCode = 'MEDICAL_CLEARANCE_HOLD';
         errorDetails = 'Your volunteer donor registration is awaiting clinical verification by an authorized coordinator or transfusion medicine department before emergency dispatch acceptance can be enabled.';
         actionRequired = 'REQUEST_MEDICAL_CLEARANCE';
@@ -428,7 +428,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
         if (errorCode === 'MEDICAL_CLEARANCE_HOLD' || msg.includes('medical clearance hold')) {
           errorCode = 'MEDICAL_CLEARANCE_HOLD';
-          statusCode = 400;
+          statusCode = 403;
           errorDetails =
             'Your volunteer donor registration is awaiting clinical verification by an authorized coordinator or transfusion medicine department before emergency dispatch acceptance can be enabled.';
           actionRequired = 'REQUEST_MEDICAL_CLEARANCE';

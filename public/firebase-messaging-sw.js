@@ -198,6 +198,13 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
+  // STRICT GUARD: Do not intercept cross-origin requests (e.g. Supabase, Firebase, Google APIs, STUN/TURN)
+  // Let the browser handle third-party network and REST API traffic natively.
+  if (url.origin !== self.location.origin) return;
+
+  // STRICT GUARD: Do not intercept serverless API endpoints (/api/*)
+  if (url.pathname.startsWith('/api/')) return;
+
   // Network-first for navigation requests and index.html to prevent stale chunk hash mismatches
   if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
     event.respondWith(
@@ -205,7 +212,7 @@ self.addEventListener('fetch', (event) => {
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(() => {});
           }
           return networkResponse;
         })
@@ -214,46 +221,65 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for immutable static assets (/assets/*, favicon, manifest, svgs)
+  // Cache-first ONLY for same-origin static immutable assets
+  const isStaticAsset =
+    url.pathname.startsWith('/assets/') ||
+    url.pathname.endsWith('.svg') ||
+    url.pathname.endsWith('.png') ||
+    url.pathname.endsWith('.jpg') ||
+    url.pathname.endsWith('.jpeg') ||
+    url.pathname.endsWith('.ico') ||
+    url.pathname.endsWith('.webmanifest') ||
+    url.pathname.endsWith('.json') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css');
+
+  if (!isStaticAsset) {
+    // For non-asset same-origin GET requests, let the browser fetch natively
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
         const contentType = cachedResponse.headers.get('content-type') || '';
         // Guard against corrupted HTML cached as JS
         if (url.pathname.endsWith('.js') && contentType.includes('text/html')) {
-          caches.open(CACHE_NAME).then((cache) => cache.delete(event.request));
+          caches.open(CACHE_NAME).then((cache) => cache.delete(event.request)).catch(() => {});
         } else {
           return cachedResponse;
         }
       }
 
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200) {
-          return networkResponse;
-        }
+      return fetch(event.request)
+        .then((networkResponse) => {
+          if (!networkResponse || networkResponse.status !== 200) {
+            return networkResponse;
+          }
 
-        const contentType = networkResponse.headers.get('content-type') || '';
+          const contentType = networkResponse.headers.get('content-type') || '';
 
-        // STRICT GUARD: Never cache text/html responses for .js or .css asset requests (Vercel 404 rewrite fallback)
-        if (url.pathname.endsWith('.js') && !contentType.includes('javascript')) {
-          return networkResponse;
-        }
-        if (url.pathname.endsWith('.css') && !contentType.includes('css')) {
-          return networkResponse;
-        }
+          // STRICT GUARD: Never cache text/html responses for .js or .css asset requests (Vercel 404 rewrite fallback)
+          if (url.pathname.endsWith('.js') && !contentType.includes('javascript')) {
+            return networkResponse;
+          }
+          if (url.pathname.endsWith('.css') && !contentType.includes('css')) {
+            return networkResponse;
+          }
 
-        if (
-          url.pathname.startsWith('/assets/') ||
-          url.pathname.endsWith('.svg') ||
-          url.pathname.endsWith('.png') ||
-          url.pathname.endsWith('.json')
-        ) {
           const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(() => {});
 
-        return networkResponse;
-      });
+          return networkResponse;
+        })
+        .catch((fetchErr) => {
+          // Gracefully fallback to cached asset if network is offline without throwing uncaught rejection
+          return caches.match(event.request).then((match) => {
+            if (match) return match;
+            // Re-throw so standard browser offline behavior applies cleanly without unhandled rejection
+            throw fetchErr;
+          });
+        });
     })
   );
 });
