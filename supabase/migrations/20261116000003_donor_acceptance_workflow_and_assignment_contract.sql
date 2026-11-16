@@ -3,11 +3,15 @@
 -- Applied to: uzwtchnqmveapzehuafb
 
 -- ----------------------------------------------------------------------------
--- 1. Expand messages_sender_role_check to support all platform roles
+-- 1. Expand messages_sender_role_check & conversation_participants_participant_role_check
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.messages DROP CONSTRAINT IF EXISTS messages_sender_role_check;
 ALTER TABLE public.messages ADD CONSTRAINT messages_sender_role_check
     CHECK (sender_role = ANY (ARRAY['patient'::text, 'donor'::text, 'coordinator'::text, 'blood_centre'::text, 'hospital'::text, 'admin'::text, 'system'::text]));
+
+ALTER TABLE public.conversation_participants DROP CONSTRAINT IF EXISTS conversation_participants_participant_role_check;
+ALTER TABLE public.conversation_participants ADD CONSTRAINT conversation_participants_participant_role_check
+    CHECK (participant_role = ANY (ARRAY['requester'::text, 'patient'::text, 'donor'::text, 'coordinator'::text, 'admin'::text]));
 
 -- ----------------------------------------------------------------------------
 -- 2. Enhanced accept_request_and_create_conversation with assignment_id return
@@ -247,7 +251,7 @@ BEGIN
         -- Add participants
         IF v_requester_id IS NOT NULL THEN
             INSERT INTO public.conversation_participants (conversation_id, user_id, participant_role)
-            VALUES (v_conversation_id, v_requester_id, 'patient')
+            VALUES (v_conversation_id, v_requester_id, 'requester')
             ON CONFLICT (conversation_id, user_id) DO UPDATE SET is_active = true;
         END IF;
 
