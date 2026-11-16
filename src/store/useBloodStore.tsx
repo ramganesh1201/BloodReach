@@ -521,6 +521,7 @@ interface BloodStoreContextType {
   backendError: string | null;
   refreshRequests: () => Promise<void>;
   refreshConversations: () => Promise<void>;
+  refreshDonorProfile: () => Promise<void>;
 
   // Auth & Roles
   currentUser: UserProfile | null;
@@ -1074,23 +1075,39 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [dataSource]);
 
+  const refreshDonorProfile = useCallback(async () => {
+    if (dataSource !== 'database' || !isSupabaseConfigured || !currentUser?.id) return;
+    try {
+      const donorRes = await donorResponseService.getDonorProfileByUserId(currentUser.id);
+      if (donorRes.success && donorRes.data) {
+        const userDonor = donorRes.data;
+        setDonors((prev) => [userDonor, ...prev.filter((d) => d.profileId !== currentUser.id)]);
+        localStorage.setItem(`careloop_donor_profile_${currentUser.id}`, JSON.stringify(userDonor));
+      }
+    } catch (err: any) {
+      console.warn('[CareLoop Store] Failed to refresh donor profile from DB:', err?.message);
+    }
+  }, [dataSource, currentUser?.id]);
+
   useEffect(() => {
     if (currentUser?.id && dataSource === 'database') {
       refreshRequests();
       refreshConversations();
       refreshInventory();
+      refreshDonorProfile();
     }
-  }, [currentUser?.id, dataSource, refreshRequests, refreshConversations, refreshInventory]);
+  }, [currentUser?.id, dataSource, refreshRequests, refreshConversations, refreshInventory, refreshDonorProfile]);
 
-  // Realtime Emergency Requests Synchronization & Focus Auto-Refresh
+  // Realtime Emergency Requests & Donors Synchronization & Focus Auto-Refresh
   useEffect(() => {
     if (dataSource !== 'database' || !isSupabaseConfigured) return;
 
-    // Fetch initial discoverable requests
+    // Fetch initial discoverable requests and donor profile
     refreshRequests();
+    refreshDonorProfile();
 
     const channel = supabase
-      .channel('careloop-emergency-requests-live')
+      .channel('careloop-live-sync')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'emergency_requests' },
@@ -1098,10 +1115,18 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           refreshRequests();
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'donors' },
+        () => {
+          refreshDonorProfile();
+        }
+      )
       .subscribe();
 
     const handleFocus = () => {
       refreshRequests();
+      refreshDonorProfile();
     };
     window.addEventListener('focus', handleFocus);
 
@@ -1109,7 +1134,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       channel.unsubscribe();
       window.removeEventListener('focus', handleFocus);
     };
-  }, [dataSource, refreshRequests]);
+  }, [dataSource, refreshRequests, refreshDonorProfile]);
 
   // Realtime Inventory Synchronization
   useEffect(() => {
@@ -2059,18 +2084,39 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (dataSource === 'database' && isSupabaseConfigured) {
       const res = await donorResponseService.requestMedicalClearanceReview(notes);
       if (res.success && currentUser?.id) {
-        setDonors((prev) =>
-          prev.map((d) =>
-            d.profileId === currentUser.id
-              ? {
-                  ...d,
-                  medicalClearanceStatus: 'PENDING_REVIEW',
-                  medicalReviewRequestedAt: new Date().toISOString(),
-                  medicalReviewNotes: notes || d.medicalReviewNotes,
-                }
-              : d
-          )
-        );
+        try {
+          const freshDonor = await donorResponseService.getDonorProfileByUserId(currentUser.id);
+          if (freshDonor.success && freshDonor.data) {
+            setDonors((prev) => [freshDonor.data!, ...prev.filter((d) => d.profileId !== currentUser.id)]);
+            localStorage.setItem(`careloop_donor_profile_${currentUser.id}`, JSON.stringify(freshDonor.data));
+          } else {
+            setDonors((prev) =>
+              prev.map((d) =>
+                d.profileId === currentUser.id
+                  ? {
+                      ...d,
+                      medicalClearanceStatus: 'PENDING_REVIEW',
+                      medicalReviewRequestedAt: new Date().toISOString(),
+                      medicalReviewNotes: notes !== undefined ? notes : d.medicalReviewNotes,
+                    }
+                  : d
+              )
+            );
+          }
+        } catch {
+          setDonors((prev) =>
+            prev.map((d) =>
+              d.profileId === currentUser.id
+                ? {
+                    ...d,
+                    medicalClearanceStatus: 'PENDING_REVIEW',
+                    medicalReviewRequestedAt: new Date().toISOString(),
+                    medicalReviewNotes: notes !== undefined ? notes : d.medicalReviewNotes,
+                  }
+                : d
+            )
+          );
+        }
       }
       return res;
     }
@@ -4026,6 +4072,7 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         backendError,
         refreshRequests,
         refreshConversations,
+        refreshDonorProfile,
         currentUser,
         currentRole,
         demoExperience,

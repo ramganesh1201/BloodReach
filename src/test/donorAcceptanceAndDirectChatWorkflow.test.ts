@@ -212,4 +212,90 @@ describe('CareLoop — Donor Acceptance & Direct Private Chat Workflow Suite', (
       expect(data).toHaveLength(0);
     });
   });
+
+  describe('3. Review Notes, Clinical Approval & Acceptance Lifecycle', () => {
+    it('3.1 Updating review notes persists notes, preserves PENDING_REVIEW, and does NOT navigate or create conversations', async () => {
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: {
+          success: true,
+          code: 'REVIEW_ALREADY_PENDING',
+          message: 'A medical clearance review is already pending for your profile.',
+          status: 'PENDING_REVIEW',
+          requested_at: '2026-11-16T08:00:00Z',
+        },
+        error: null,
+      } as any);
+
+      const res = await requestMedicalClearanceReview('Verified donor card #RC-9981');
+      expect(res.success).toBe(true);
+      expect(res.code).toBe('REVIEW_ALREADY_PENDING');
+      expect(res.data?.status).toBe('PENDING_REVIEW');
+      // Verify no conversationId or assignment is generated
+      expect(res.data?.conversation_id).toBeUndefined();
+      expect(res.data?.assignment_id).toBeUndefined();
+    });
+
+    it('3.2 Notes containing text "accepted" do NOT grant approval (status remains PENDING_REVIEW)', async () => {
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: {
+          success: true,
+          code: 'REVIEW_ALREADY_PENDING',
+          message: 'A medical clearance review is already pending for your profile.',
+          status: 'PENDING_REVIEW',
+        },
+        error: null,
+      } as any);
+
+      const res = await requestMedicalClearanceReview('accepted');
+      expect(res.success).toBe(true);
+      expect(res.data?.status).toBe('PENDING_REVIEW');
+      expect(res.data?.status).not.toBe('APPROVED');
+    });
+
+    it('3.3 Authorized clinical reviewer approves clearance -> donor status transitions to APPROVED', async () => {
+      const { reviewDonorMedicalClearance } = await import('../services/donorResponseService');
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: {
+          success: true,
+          decision: 'APPROVED',
+          donor_id: 'd2222222-2222-4222-b222-222222222222',
+          message: 'Donor medical clearance approved successfully.',
+        },
+        error: null,
+      } as any);
+
+      const res = await reviewDonorMedicalClearance(
+        'd2222222-2222-4222-b222-222222222222',
+        'APPROVED',
+        'NBTC criteria verified. Weight 65kg, Hb 14.2 g/dL.'
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.decision).toBe('APPROVED');
+    });
+
+    it('3.4 Once approved, donor acceptance succeeds and creates private conversation route', async () => {
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: {
+          success: true,
+          request_id: 'req-after-approval-1',
+          assignment_id: 'assign-approved-1',
+          conversation_id: 'conv-approved-1',
+          donor_name: 'Approved Donor',
+          status: 'ACCEPTED',
+          already_accepted: false,
+        },
+        error: null,
+      } as any);
+
+      const res = await acceptRequestAndCreateConversation(
+        'req-after-approval-1',
+        'd2222222-2222-4222-b222-222222222222'
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.conversationId).toBe('conv-approved-1');
+      expect(res.conversationRoute).toBe('/communication?conversationId=conv-approved-1');
+    });
+  });
 });

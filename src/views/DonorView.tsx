@@ -80,6 +80,7 @@ export const DonorView: React.FC = () => {
     donors,
     requests,
     refreshRequests,
+    refreshDonorProfile,
     donorResponses,
     donorAssignments,
     conversations,
@@ -113,15 +114,17 @@ export const DonorView: React.FC = () => {
     setSearchParams({ tab: newTab }, { replace: true });
   };
 
-  // Authoritative live request synchronization on mount and tab focus
+  // Authoritative live request and donor profile synchronization on mount and tab focus
   useEffect(() => {
     refreshRequests();
+    refreshDonorProfile?.();
     const handleFocus = () => {
       refreshRequests();
+      refreshDonorProfile?.();
     };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [refreshRequests]);
+  }, [refreshRequests, refreshDonorProfile]);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
   const [cardErrorCodes, setCardErrorCodes] = useState<Record<string, string>>({});
@@ -178,6 +181,13 @@ export const DonorView: React.FC = () => {
       setContactDistrict(activeDonor.district || '');
     }
   }, [activeDonor?.phone, activeDonor?.city, activeDonor?.district]);
+
+  // Synchronize review notes input whenever the modal is opened
+  useEffect(() => {
+    if (isReviewModalOpen && activeDonor) {
+      setReviewNotes(activeDonor.medicalReviewNotes || '');
+    }
+  }, [isReviewModalOpen, activeDonor?.medicalReviewNotes]);
 
   // Unlinked or unonboarded user view
   if (!activeDonor) {
@@ -297,19 +307,21 @@ export const DonorView: React.FC = () => {
     }
   };
 
-  const handleRequestMedicalReview = async () => {
+  const handleRequestMedicalReview = async (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     setIsSubmittingReview(true);
     setReviewErrorMsg(null);
     setReviewSuccessMsg(null);
     try {
       const res = await requestMedicalClearanceReview(reviewNotes);
       if (res.success) {
-        setReviewSuccessMsg(res.message || 'Medical clearance review requested successfully.');
+        setReviewSuccessMsg(res.message || 'Medical clearance notes saved successfully.');
         setTimeout(() => {
           setIsReviewModalOpen(false);
           setReviewSuccessMsg(null);
-          setReviewNotes('');
-        }, 2000);
+        }, 1500);
       } else {
         setReviewErrorMsg(res.error || 'Failed to submit clearance review request.');
       }
