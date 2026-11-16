@@ -37,7 +37,16 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
   const isDeferral =
     errorCode === 'ACTIVE_DEFERRAL' ||
     Boolean(errorMessage && errorMessage.toLowerCase().includes('deferral'));
-  const isFulfilled =
+  const isUnavailable =
+    errorCode === 'DONOR_UNAVAILABLE' ||
+    Boolean(errorMessage && errorMessage.toLowerCase().includes('unavailable'));
+  const isIncompatible =
+    errorCode === 'INCOMPATIBLE_BLOOD_GROUP' ||
+    Boolean(errorMessage && errorMessage.toLowerCase().includes('incompatible'));
+  const isAlreadyAccepted =
+    errorCode === 'REQUEST_ALREADY_ACCEPTED' ||
+    Boolean(errorMessage && errorMessage.toLowerCase().includes('already accepted'));
+  const isCapacityReached =
     errorCode === 'CAPACITY_REACHED' ||
     Boolean(
       errorMessage &&
@@ -45,6 +54,9 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
           errorMessage.toLowerCase().includes('fulfilled') ||
           errorMessage.toLowerCase().includes('coordinated'))
     );
+  const isAuthFailed =
+    errorCode === 'AUTHORIZATION_FAILED' ||
+    Boolean(errorMessage && errorMessage.toLowerCase().includes('authorization'));
 
   const errorTitle = isMedicalHold
     ? 'Medical Clearance Hold Active'
@@ -52,8 +64,16 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
     ? 'Self-Acceptance Blocked'
     : isDeferral
     ? 'Donation Deferral Active'
-    : isFulfilled
+    : isUnavailable
+    ? 'Donor Status Unavailable'
+    : isIncompatible
+    ? 'Clinical Compatibility Blocked'
+    : isAlreadyAccepted
+    ? 'Request Already Accepted'
+    : isCapacityReached
     ? 'Request Already Fulfilled'
+    : isAuthFailed
+    ? 'Authorization Required'
     : 'Acceptance Blocked';
   return (
     <div className="bg-app-surface rounded-xl border border-app-border p-5 shadow-card space-y-4 hover:border-brand/30 transition-all">

@@ -2231,8 +2231,8 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!req) return { success: false, error: 'Emergency request not found' };
     if (!donor) return { success: false, error: 'Donor record not found' };
 
-    // Enforce medical clearance hold in demo mode if unverified
-    if (donor.isMedicallyCleared === false) {
+    // Enforce medical clearance hold in demo mode if unverified (Authoritative Rule)
+    if (donor.isMedicallyCleared !== true || donor.medicalClearanceStatus !== 'APPROVED') {
       return {
         success: false,
         code: 'MEDICAL_CLEARANCE_HOLD',

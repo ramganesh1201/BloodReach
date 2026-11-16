@@ -269,12 +269,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   // 5. Resolve Caller Donor Profile & Auto-Provision if Profile Exists
   let { data: donorRow } = await supabase
     .from('donors')
-    .select('id, profile_id, full_name, phone, blood_group, is_available, is_medically_cleared, deferral_until')
+    .select('id, profile_id, full_name, phone, blood_group, is_available, is_medically_cleared, medical_clearance_status, deferral_until')
     .eq('profile_id', callerUser.id)
     .maybeSingle();
 
   if (!donorRow) {
-    // If no donor row exists, check user profile and auto-provision verified donor record
+    // If no donor row exists, check user profile and auto-provision donor record under clinical review
     const { data: userProfile } = await supabase
       .from('profiles')
       .select('*')
@@ -293,7 +293,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           city: userProfile.city || 'Hyderabad',
           district: userProfile.district || null,
           is_available: true,
-          is_medically_cleared: true,
+          is_medically_cleared: false,
+          medical_clearance_status: 'PENDING_REVIEW',
           total_donations: 0,
         })
         .select()
@@ -359,12 +360,26 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       console.warn('[accept-request] Database RPC error:', rpcError.message);
       const msg = rpcError.message || 'Database error during acceptance.';
       let statusCode = 400;
-      if (msg.includes('permission denied')) statusCode = 403;
-      else if (msg.includes('not found')) statusCode = 404;
+      let errorCode = 'INTERNAL_SERVER_ERROR';
+      let errorDetails: string | undefined = undefined;
+      let actionRequired: string | undefined = undefined;
+
+      if (msg.includes('permission denied') || msg.includes('JWT') || msg.includes('unauthorized')) {
+        statusCode = 401;
+        errorCode = 'AUTHORIZATION_FAILED';
+      } else if (msg.includes('not found')) {
+        statusCode = 404;
+        errorCode = 'REQUEST_NOT_FOUND';
+      } else if (msg.includes('medical clearance hold')) {
+        statusCode = 400;
+        errorCode = 'MEDICAL_CLEARANCE_HOLD';
+        errorDetails = 'Your volunteer donor registration is awaiting clinical verification by an authorized coordinator or transfusion medicine department before emergency dispatch acceptance can be enabled.';
+        actionRequired = 'REQUEST_MEDICAL_CLEARANCE';
+      }
 
       res.statusCode = statusCode;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: false, error: msg }));
+      res.end(JSON.stringify({ success: false, code: errorCode, error: msg, details: errorDetails, actionRequired }));
       return;
     }
 

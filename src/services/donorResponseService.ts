@@ -309,21 +309,26 @@ export async function acceptRequestAndCreateConversation(
       let actionRequired: string | undefined;
       let clearanceStatus: string | undefined;
 
-      if (msg.includes('medical clearance hold')) {
+      const lower = msg.toLowerCase();
+      if (lower.includes('medical clearance hold')) {
         code = 'MEDICAL_CLEARANCE_HOLD';
         clearanceStatus = 'PENDING_REVIEW';
         actionRequired = 'REQUEST_MEDICAL_CLEARANCE';
         details = 'Your volunteer donor registration is awaiting clinical verification by an authorized coordinator or transfusion medicine department before emergency dispatch acceptance can be enabled.';
-      } else if (msg.includes('cannot respond to or accept their own')) {
+      } else if (lower.includes('cannot respond to or accept their own') || lower.includes('anti_self_match')) {
         code = 'ANTI_SELF_MATCH';
-      } else if (msg.includes('deferral') || msg.includes('Inter-donation interval')) {
+      } else if (lower.includes('deferral') || lower.includes('inter-donation interval')) {
         code = 'ACTIVE_DEFERRAL';
-      } else if (msg.includes('fully coordinated') || msg.includes('capacity')) {
+      } else if (lower.includes('fully coordinated') || lower.includes('capacity')) {
         code = 'CAPACITY_REACHED';
-      } else if (msg.includes('temporarily unavailable')) {
+      } else if (lower.includes('temporarily unavailable') || lower.includes('unavailable')) {
         code = 'DONOR_UNAVAILABLE';
-      } else if (msg.includes('incompatible')) {
+      } else if (lower.includes('incompatible')) {
         code = 'INCOMPATIBLE_BLOOD_GROUP';
+      } else if (lower.includes('already accepted')) {
+        code = 'REQUEST_ALREADY_ACCEPTED';
+      } else if (lower.includes('unauthorized') || lower.includes('authentication')) {
+        code = 'AUTHORIZATION_FAILED';
       }
 
       return {
@@ -393,13 +398,18 @@ export async function requestMedicalClearanceReview(
     });
 
     if (error) {
-      return { success: false, error: error.message };
+      const msg = error.message || '';
+      let code = 'REVIEW_REQUEST_FAILED';
+      if (msg.includes('already pending')) code = 'REVIEW_ALREADY_PENDING';
+      else if (msg.includes('deferral')) code = 'ACTIVE_DEFERRAL';
+      else if (msg.includes('unauthorized') || msg.includes('Authentication')) code = 'AUTHORIZATION_FAILED';
+      return { success: false, code, error: error.message };
     }
 
     const res = data as any;
     return {
       success: Boolean(res?.success),
-      code: res?.code || (res?.success ? 'REVIEW_REQUESTED' : undefined),
+      code: res?.code || (res?.success ? 'REVIEW_REQUESTED' : 'REVIEW_REQUEST_FAILED'),
       message: res?.message,
       error: res?.success === false ? res?.message : undefined,
       data: res,

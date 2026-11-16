@@ -14,7 +14,6 @@ describe('CareLoop — Donor Medical Clearance Governance & Structured Error Sui
 
   describe('1. Structured Medical Clearance Holds & Error Codes', () => {
     it('1.1 Maps database hold error to MEDICAL_CLEARANCE_HOLD structured code', async () => {
-      // Mock supabase RPC throwing hold error
       vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
         data: null,
         error: {
@@ -23,7 +22,6 @@ describe('CareLoop — Donor Medical Clearance Governance & Structured Error Sui
         },
       } as any);
 
-      // In test mode, fetch is mocked or we call acceptRequestAndCreateConversation directly
       const result = await acceptRequestAndCreateConversation('req-123', 'donor-hold-1');
 
       expect(result.success).toBe(false);
@@ -76,6 +74,66 @@ describe('CareLoop — Donor Medical Clearance Governance & Structured Error Sui
 
       expect(result.success).toBe(false);
       expect(result.code).toBe('CAPACITY_REACHED');
+    });
+
+    it('1.5 Maps donor unavailable to DONOR_UNAVAILABLE structured code', async () => {
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: null,
+        error: {
+          message: 'Donor is currently marked as temporarily unavailable.',
+          code: 'P0001',
+        },
+      } as any);
+
+      const result = await acceptRequestAndCreateConversation('req-123', 'donor-unavail-1');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('DONOR_UNAVAILABLE');
+    });
+
+    it('1.6 Maps incompatible blood group to INCOMPATIBLE_BLOOD_GROUP structured code', async () => {
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: null,
+        error: {
+          message: 'Incompatible blood group: Whole blood transfusion strictly requires exact match.',
+          code: 'P0001',
+        },
+      } as any);
+
+      const result = await acceptRequestAndCreateConversation('req-123', 'donor-incomp-1');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INCOMPATIBLE_BLOOD_GROUP');
+    });
+
+    it('1.7 Maps already accepted to REQUEST_ALREADY_ACCEPTED structured code', async () => {
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: null,
+        error: {
+          message: 'You have already accepted this emergency request.',
+          code: 'P0001',
+        },
+      } as any);
+
+      const result = await acceptRequestAndCreateConversation('req-123', 'donor-123');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('REQUEST_ALREADY_ACCEPTED');
+    });
+
+    it('1.8 Maps authorization error to AUTHORIZATION_FAILED structured code', async () => {
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: null,
+        error: {
+          message: 'Authentication required to accept donation requests.',
+          code: 'P0001',
+        },
+      } as any);
+
+      const result = await acceptRequestAndCreateConversation('req-123', 'donor-123');
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('AUTHORIZATION_FAILED');
     });
   });
 
@@ -171,6 +229,59 @@ describe('CareLoop — Donor Medical Clearance Governance & Structured Error Sui
       expect(res.data).toHaveLength(1);
       expect(res.data?.[0].full_name).toBe('Test Donor A');
     });
+
+    it('2.6 requestMedicalClearanceReview handles REVIEW_ALREADY_PENDING idempotently', async () => {
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: {
+          success: true,
+          code: 'REVIEW_ALREADY_PENDING',
+          status: 'PENDING_REVIEW',
+          message: 'A medical clearance review is already pending for your profile.',
+          requested_at: '2026-11-16T08:00:00Z',
+        },
+        error: null,
+      } as any);
+
+      const res = await requestMedicalClearanceReview('Repeated request with updated notes');
+
+      expect(res.success).toBe(true);
+      expect(res.code).toBe('REVIEW_ALREADY_PENDING');
+      expect(res.data?.status).toBe('PENDING_REVIEW');
+    });
+
+    it('2.7 requestMedicalClearanceReview handles ACTIVE_DEFERRAL', async () => {
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: {
+          success: false,
+          code: 'ACTIVE_DEFERRAL',
+          message: 'Your profile is under medical deferral until 2026-12-01.',
+          deferral_until: '2026-12-01T00:00:00Z',
+        },
+        error: null,
+      } as any);
+
+      const res = await requestMedicalClearanceReview();
+
+      expect(res.success).toBe(false);
+      expect(res.code).toBe('ACTIVE_DEFERRAL');
+    });
+
+    it('2.8 requestMedicalClearanceReview handles ALREADY_CLEARED', async () => {
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: {
+          success: true,
+          code: 'ALREADY_CLEARED',
+          status: 'APPROVED',
+          message: 'Your donor profile is already medically cleared.',
+        },
+        error: null,
+      } as any);
+
+      const res = await requestMedicalClearanceReview();
+
+      expect(res.success).toBe(true);
+      expect(res.code).toBe('ALREADY_CLEARED');
+    });
   });
 
   describe('3. Successful Acceptance Flow for Medically Cleared Donor', () => {
@@ -194,6 +305,27 @@ describe('CareLoop — Donor Medical Clearance Governance & Structured Error Sui
       expect(result.success).toBe(true);
       expect(result.conversationId).toBe('conv-test-999');
       expect(result.status).toBe('ACCEPTED');
+    });
+
+    it('3.2 Idempotently handles already accepted request with REQUEST_ALREADY_ACCEPTED', async () => {
+      vi.spyOn(supabase, 'rpc').mockResolvedValueOnce({
+        data: {
+          success: true,
+          code: 'REQUEST_ALREADY_ACCEPTED',
+          conversation_id: 'conv-test-999',
+          request_id: 'req-valid-1',
+          donor_name: 'Mohan',
+          already_accepted: true,
+          status: 'ACCEPTED',
+        },
+        error: null,
+      } as any);
+
+      const result = await acceptRequestAndCreateConversation('req-valid-1', 'donor-cleared-1');
+
+      expect(result.success).toBe(true);
+      expect(result.alreadyAccepted).toBe(true);
+      expect(result.conversationId).toBe('conv-test-999');
     });
   });
 });
