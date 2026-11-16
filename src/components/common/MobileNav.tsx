@@ -15,6 +15,15 @@ export const MobileNav: React.FC = () => {
   const { authenticatedRole, demoExperience, isRegisteredDonor } = useBloodStore();
   const location = useLocation();
 
+  // Hide bottom nav on mobile when inside an active 1-on-1 chat to prevent overlapping message composer and virtual keyboard
+  const isMobileActiveChat =
+    location.pathname.startsWith('/communication') &&
+    (location.search.includes('conversationId=') || location.search.includes('view=chat'));
+
+  if (isMobileActiveChat) {
+    return null;
+  }
+
   const effectiveRole = authenticatedRole || demoExperience;
   let mobileNavItems: NavItem[] = effectiveRole ? (MOBILE_NAV_BY_ROLE[effectiveRole] || PUBLIC_MOBILE_NAV) : PUBLIC_MOBILE_NAV;
 

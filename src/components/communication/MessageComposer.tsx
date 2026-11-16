@@ -93,7 +93,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   };
 
   return (
-    <div className="border-t border-[#E6E9E7] bg-white p-3 sm:p-4 space-y-3">
+    <div className="border-t border-[#E6E9E7] bg-white p-2.5 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] space-y-2.5 shadow-sm">
       {/* Offline Status Notice */}
       {isOffline && (
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-xs">
@@ -103,8 +103,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       )}
 
       {/* Quick Response Chips */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        <span className="text-[11px] font-semibold text-[#69716F] flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <span className="text-[10px] sm:text-[11px] font-semibold text-[#69716F] flex items-center gap-1 shrink-0">
           <Sparkles className="w-3 h-3 text-[#B42332]" />
           Quick updates:
         </span>
@@ -113,7 +113,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             key={idx}
             type="button"
             onClick={() => setText(phrase)}
-            className="text-[11px] px-2.5 py-1 rounded-full bg-[#F8F9F8] hover:bg-[#F0F2F0] border border-[#E6E9E7] text-[#202322] whitespace-nowrap transition-colors shrink-0"
+            className="text-[10px] sm:text-[11px] px-2.5 py-1 rounded-full bg-[#F8F9F8] hover:bg-[#F0F2F0] border border-[#E6E9E7] text-[#202322] whitespace-nowrap transition-colors shrink-0 active:scale-95"
           >
             {phrase}
           </button>
@@ -156,7 +156,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           title="Attach document or prescription (max 10MB)"
-          className="p-2.5 rounded-xl border border-[#E6E9E7] bg-[#F8F9F8] hover:bg-[#F0F2F0] text-[#69716F] hover:text-[#202322] transition-colors shrink-0"
+          className="min-h-[44px] min-w-[44px] p-2.5 rounded-xl border border-[#E6E9E7] bg-[#F8F9F8] hover:bg-[#F0F2F0] text-[#69716F] hover:text-[#202322] transition-colors shrink-0 flex items-center justify-center"
         >
           <Paperclip className="w-4 h-4" />
         </button>
@@ -164,20 +164,29 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         <div className="flex-1 relative">
           <textarea
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              e.target.style.height = 'auto';
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+            }}
             onKeyDown={handleKeyDown}
-            placeholder="Type your emergency coordination message... (Enter to send, Shift+Enter for newline)"
+            placeholder="Type your emergency message... (Enter to send, Shift+Enter for newline)"
             rows={1}
-            className="w-full resize-none py-2.5 px-3.5 text-xs sm:text-sm rounded-xl bg-[#F8F9F8] border border-[#E6E9E7] text-[#202322] placeholder:text-[#69716F] focus:outline-none focus:ring-1 focus:ring-[#B42332] focus:border-[#B42332] max-h-32"
+            className="w-full resize-none py-2.5 px-3.5 text-xs sm:text-sm rounded-xl bg-[#F8F9F8] border border-[#E6E9E7] text-[#202322] placeholder:text-[#69716F] focus:outline-none focus:ring-1 focus:ring-[#B42332] focus:border-[#B42332] max-h-32 min-h-[44px]"
           />
         </div>
 
         <button
           type="submit"
           disabled={(!text.trim() && !selectedFile) || isSending}
-          className="p-2.5 rounded-xl bg-[#B42332] hover:bg-[#8F1928] text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm shrink-0 flex items-center justify-center"
+          className="min-h-[44px] min-w-[44px] p-2.5 rounded-xl bg-[#B42332] hover:bg-[#8F1928] text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm shrink-0 flex items-center justify-center active:scale-95"
+          aria-label="Send message"
         >
-          <Send className="w-4 h-4" />
+          {isSending ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Send className="w-4 h-4" />
+          )}
         </button>
       </form>
     </div>

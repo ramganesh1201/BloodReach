@@ -154,10 +154,20 @@ export const AuthCard: React.FC<AuthCardProps> = ({
 
   const handleGoogleSignIn = async () => {
     clearMessages();
-    const result = await signInWithOAuth('google');
+    const redirectPath =
+      (location.state as any)?.from ||
+      (location.pathname !== '/login' && location.pathname !== '/register'
+        ? location.pathname
+        : '/');
+    const result = await signInWithOAuth('google', redirectPath);
     if (!result.success && result.error) {
-      if (result.error.toLowerCase().includes('not enabled') || result.error.toLowerCase().includes('unsupported provider')) {
-        setErrorMessage('Google OAuth is not yet enabled in the Supabase Dashboard. Please sign in with your email and password, or contact the system administrator.');
+      if (
+        result.error.toLowerCase().includes('not enabled') ||
+        result.error.toLowerCase().includes('unsupported provider')
+      ) {
+        setErrorMessage(
+          'Google OAuth is not enabled in the Supabase Dashboard. Please sign in with your email and password, or contact your administrator.'
+        );
       } else {
         setErrorMessage(result.error);
       }

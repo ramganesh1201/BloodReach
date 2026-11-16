@@ -534,7 +534,7 @@ interface BloodStoreContextType {
 
   // Auth Operations
   signIn: (email: string, password?: string) => Promise<{ success: boolean; error?: string; role?: UserRole }>;
-  signInWithOAuth: (provider?: 'google') => Promise<{ success: boolean; error?: string }>;
+  signInWithOAuth: (provider?: 'google', redirectToPath?: string) => Promise<{ success: boolean; error?: string }>;
   signUp: (params: {
     email: string;
     password?: string;
@@ -737,30 +737,43 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return INITIAL_MESSAGES;
   });
 
-  // Request-Linked Communication State
+  // Request-Linked Communication State (Initialized strictly empty in live mode to prevent cross-account mock leaks)
   const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const saved = localStorage.getItem('careloop_conversations');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+    const isDemo = Boolean(sessionStorage.getItem('careloop_demo_experience'));
+    if (isDemo) {
+      const saved = localStorage.getItem('careloop_conversations');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+      }
+      return INITIAL_CONVERSATIONS;
     }
-    return INITIAL_CONVERSATIONS;
+    return [];
   });
   const [activeConversationId, setActiveConversationId] = useState<string | null>(() => {
-    return INITIAL_CONVERSATIONS[0]?.id || null;
+    const isDemo = Boolean(sessionStorage.getItem('careloop_demo_experience'));
+    return isDemo ? (INITIAL_CONVERSATIONS[0]?.id || null) : null;
   });
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>(() => {
-    const saved = localStorage.getItem('careloop_chat_messages');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+    const isDemo = Boolean(sessionStorage.getItem('careloop_demo_experience'));
+    if (isDemo) {
+      const saved = localStorage.getItem('careloop_chat_messages');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+      }
+      return INITIAL_CHAT_MESSAGES;
     }
-    return INITIAL_CHAT_MESSAGES;
+    return {};
   });
   const [coordinationEvents, setCoordinationEvents] = useState<CoordinationEvent[]>(() => {
-    const saved = localStorage.getItem('careloop_coordination_events');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+    const isDemo = Boolean(sessionStorage.getItem('careloop_demo_experience'));
+    if (isDemo) {
+      const saved = localStorage.getItem('careloop_coordination_events');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+      }
+      return INITIAL_COORDINATION_EVENTS;
     }
-    return INITIAL_COORDINATION_EVENTS;
+    return [];
   });
   const [callSessions, setCallSessions] = useState<CallSession[]>(INITIAL_CALL_SESSIONS);
   const [activeCallSession, setActiveCallSession] = useState<CallSession | null>(null);
@@ -846,14 +859,40 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
 
         if (session?.user && isMounted) {
-          const { data: profileRow } = await supabase
+          let { data: profileRow } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', session.user.id)
             .maybeSingle();
 
+          if (!profileRow) {
+            // Wait 350ms in case Postgres handle_new_user trigger is executing
+            await new Promise((r) => setTimeout(r, 350));
+            const retryRes = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .maybeSingle();
+            profileRow = retryRes.data;
+          }
+
+          if (!profileRow) {
+            // Safe self-healing fallback for OAuth users, strictly defaulting to 'patient'
+            const meta = session.user.user_metadata || {};
+            const fallbackProfile = {
+              id: session.user.id,
+              email: session.user.email || '',
+              full_name: meta.full_name || meta.name || 'CareLoop User',
+              role: 'patient',
+              city: 'Hyderabad',
+              status: 'ACTIVE',
+            };
+            await supabase.from('profiles').upsert(fallbackProfile);
+            profileRow = fallbackProfile as any;
+          }
+
           if (profileRow && isMounted) {
-            const verifiedRole = profileRow.role as UserRole;
+            const verifiedRole = (profileRow.role as UserRole) || 'patient';
             const verifiedProfile: UserProfile = {
               id: profileRow.id,
               email: profileRow.email || session.user.email || '',
@@ -923,14 +962,38 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (!isMounted) return;
       if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
         try {
-          const { data: profileRow } = await supabase
+          let { data: profileRow } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', session.user.id)
             .maybeSingle();
 
+          if (!profileRow) {
+            await new Promise((r) => setTimeout(r, 350));
+            const retryRes = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .maybeSingle();
+            profileRow = retryRes.data;
+          }
+
+          if (!profileRow) {
+            const meta = session.user.user_metadata || {};
+            const fallbackProfile = {
+              id: session.user.id,
+              email: session.user.email || '',
+              full_name: meta.full_name || meta.name || 'CareLoop User',
+              role: 'patient',
+              city: 'Hyderabad',
+              status: 'ACTIVE',
+            };
+            await supabase.from('profiles').upsert(fallbackProfile);
+            profileRow = fallbackProfile as any;
+          }
+
           if (profileRow && isMounted) {
-            const verifiedRole = profileRow.role as UserRole;
+            const verifiedRole = (profileRow.role as UserRole) || 'patient';
             const verifiedProfile: UserProfile = {
               id: profileRow.id,
               email: profileRow.email || session.user.email || '',
@@ -973,8 +1036,15 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (isMounted) {
           setCurrentUser(null);
           setAuthenticatedRole(null);
+          setConversations([]);
+          setActiveConversationId(null);
+          setChatMessages({});
+          setCoordinationEvents([]);
           localStorage.removeItem('careloop_auth_role');
           localStorage.removeItem('careloop_user_profile');
+          localStorage.removeItem('careloop_conversations');
+          localStorage.removeItem('careloop_chat_messages');
+          localStorage.removeItem('careloop_coordination_events');
           sessionStorage.removeItem('careloop_demo_experience');
           setDemoExperience(null);
           notificationService.cleanup();
@@ -1268,16 +1338,34 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [donorResponses]);
 
   useEffect(() => {
-    localStorage.setItem('careloop_conversations', JSON.stringify(conversations));
-  }, [conversations]);
+    if (demoExperience) {
+      localStorage.setItem('careloop_conversations', JSON.stringify(conversations));
+    } else if (currentUser?.id) {
+      localStorage.setItem(`careloop_conversations_${currentUser.id}`, JSON.stringify(conversations));
+    } else {
+      localStorage.removeItem('careloop_conversations');
+    }
+  }, [conversations, demoExperience, currentUser?.id]);
 
   useEffect(() => {
-    localStorage.setItem('careloop_chat_messages', JSON.stringify(chatMessages));
-  }, [chatMessages]);
+    if (demoExperience) {
+      localStorage.setItem('careloop_chat_messages', JSON.stringify(chatMessages));
+    } else if (currentUser?.id) {
+      localStorage.setItem(`careloop_chat_messages_${currentUser.id}`, JSON.stringify(chatMessages));
+    } else {
+      localStorage.removeItem('careloop_chat_messages');
+    }
+  }, [chatMessages, demoExperience, currentUser?.id]);
 
   useEffect(() => {
-    localStorage.setItem('careloop_coordination_events', JSON.stringify(coordinationEvents));
-  }, [coordinationEvents]);
+    if (demoExperience) {
+      localStorage.setItem('careloop_coordination_events', JSON.stringify(coordinationEvents));
+    } else if (currentUser?.id) {
+      localStorage.setItem(`careloop_coordination_events_${currentUser.id}`, JSON.stringify(coordinationEvents));
+    } else {
+      localStorage.removeItem('careloop_coordination_events');
+    }
+  }, [coordinationEvents, demoExperience, currentUser?.id]);
 
   // Subscribe to NotificationService
   useEffect(() => {
@@ -1774,7 +1862,8 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const signInWithOAuth = async (
-    provider: 'google' = 'google'
+    provider: 'google' = 'google',
+    redirectToPath?: string
   ): Promise<{ success: boolean; error?: string }> => {
     setIsAuthLoading(true);
     setAuthError(null);
@@ -1783,10 +1872,20 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setIsAuthLoading(false);
         return { success: false, error: 'Database authentication is not configured.' };
       }
+      const targetPath =
+        redirectToPath ||
+        (window.location.pathname !== '/login' && window.location.pathname !== '/register'
+          ? window.location.pathname
+          : '/');
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/`,
+          redirectTo: `${window.location.origin}${targetPath}`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
         },
       });
       if (error) {
@@ -1811,8 +1910,15 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setCurrentUser(null);
     setAuthenticatedRole(null);
     setDemoExperience(null);
+    setConversations([]);
+    setActiveConversationId(null);
+    setChatMessages({});
+    setCoordinationEvents([]);
     localStorage.removeItem('careloop_auth_role');
     localStorage.removeItem('careloop_user_profile');
+    localStorage.removeItem('careloop_conversations');
+    localStorage.removeItem('careloop_chat_messages');
+    localStorage.removeItem('careloop_coordination_events');
     sessionStorage.removeItem('careloop_demo_experience');
 
     notificationService.sendInAppNotification({
@@ -3786,52 +3892,97 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   }, [requests, donors, donorResponses, notifications, conversations]);
 
-  // User-Scoped Filter: Donors ONLY see their own conversation; Requesters see all accepted donors for their requests
+  // User-Scoped Filter: Strict participant privacy across all roles and data sources
   const getConversationsForUser = useCallback((): Conversation[] => {
+    if (!currentUser && !demoExperience) {
+      return [];
+    }
+
+    // Demo Mode Experience (unauthenticated previews only)
+    if (demoExperience && !currentUser) {
+      if (demoExperience === 'donor') {
+        return conversations.filter(
+          (c) =>
+            c.donorId === 'donor-1' ||
+            c.donorId === 'donor-sarah-jenkins' ||
+            c.donorName?.includes('Sarah')
+        );
+      }
+      if (demoExperience === 'patient') {
+        return conversations.filter(
+          (c) => c.requesterId === 'usr-patient' || c.requestId === 'req-8f42'
+        );
+      }
+      return conversations;
+    }
+
+    // Authenticated Live Production Modes
     if (currentRole === 'donor') {
       const activeDonorProfile =
         userDonorProfile ||
-        donors.find((d) => (currentUser?.id && d.profileId === currentUser.id) || (currentUser?.email && d.email === currentUser.email));
-      const activeDonorId = activeDonorProfile?.id || (currentUser?.id?.startsWith('donor-') ? currentUser.id : null);
+        donors.find(
+          (d) =>
+            (currentUser?.id && d.profileId === currentUser.id) ||
+            (currentUser?.email && d.email === currentUser.email)
+        );
+      const activeDonorId =
+        activeDonorProfile?.id || (currentUser?.id?.startsWith('donor-') ? currentUser.id : null);
 
       return conversations.filter((c) => {
-        // 1. Direct active selection always preserved
-        if (activeConversationId && c.id === activeConversationId) return true;
-        // 2. Linked donor profile table ID match
-        if (activeDonorId && c.donorId === activeDonorId) return true;
-        // 3. User account UUID match
-        if (currentUser?.id && (c.donorId === currentUser.id || (c as any).donorProfileId === currentUser.id)) return true;
-        // 4. Demo experience fallback
-        if (demoExperience && (c.donorId === 'donor-1' || c.donorId === 'donor-sarah-jenkins' || c.donorName?.includes('Sarah'))) return true;
-        // 5. In live database mode, rows returned by Supabase RLS belong strictly to caller
-        if (dataSource === 'database' && currentUser?.id) return true;
+        const isDonorMatch =
+          Boolean(activeDonorId && c.donorId === activeDonorId) ||
+          Boolean(
+            currentUser?.id &&
+              (c.donorId === currentUser.id || (c as any).donorProfileId === currentUser.id)
+          );
+        return isDonorMatch;
+      });
+    }
+
+    if (currentRole === 'patient') {
+      const patientId = currentUser?.id;
+      return conversations.filter((c) => {
+        const isDirectRequester = Boolean(patientId && c.requesterId === patientId);
+        const isRequestOwner = requests.some(
+          (r) =>
+            r.id === c.requestId &&
+            Boolean(
+              patientId &&
+                (r.createdBy === patientId ||
+                  (r as any).requesterId === patientId ||
+                  (r as any).patientId === patientId)
+            )
+        );
+        return isDirectRequester || isRequestOwner;
+      });
+    }
+
+    if (currentRole === 'coordinator' || currentRole === 'blood_centre' || currentRole === 'admin') {
+      const staffId = currentUser?.id;
+      return conversations.filter((c) => {
+        if (!staffId) return false;
+        // 1. Direct participant on conversation
+        if (c.requesterId === staffId || c.donorId === staffId || (c as any).coordinatorId === staffId) {
+          return true;
+        }
+        // 2. Explicitly assigned in donorAssignments table
+        if (donorAssignments.some((da) => da.requestId === c.requestId && da.coordinatorId === staffId)) {
+          return true;
+        }
         return false;
       });
     }
-    if (currentRole === 'patient') {
-      const patientPhone = currentUser?.phone || '+91 98490 55123';
-      const patientId = currentUser?.id || 'usr-patient';
-      return conversations.filter(
-        (c) =>
-          c.id === activeConversationId ||
-          c.requesterId === patientId ||
-          c.requesterPhone === patientPhone ||
-          requests.some((r) => r.id === c.requestId) ||
-          (dataSource === 'database' && currentUser?.id)
-      );
-    }
-    // Coordinator & Blood Centre & Admin have clinical oversight
-    return conversations;
+
+    return [];
   }, [
     currentRole,
     currentUser,
     conversations,
     donors,
     requests,
+    donorAssignments,
     userDonorProfile,
-    activeConversationId,
     demoExperience,
-    dataSource,
   ]);
 
   const updateInventory = async (

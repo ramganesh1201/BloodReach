@@ -1,12 +1,27 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ShieldCheck, MessageSquare, PhoneCall, Building2, ExternalLink, Activity } from 'lucide-react';
+import { useBloodStore } from '../../store/useBloodStore';
+import { ShieldCheck } from 'lucide-react';
+
+const AUTHENTICATED_ROUTES = [
+  '/patient',
+  '/donor',
+  '/admin',
+  '/coordinator',
+  '/blood-centre',
+  '/hospital',
+  '/communication',
+];
 
 export const Footer: React.FC = () => {
   const location = useLocation();
+  const { currentUser, authenticatedRole } = useBloodStore();
 
-  // Suppress static footer in the dedicated real-time communication workspace
-  if (location.pathname.startsWith('/communication')) {
+  // Suppress static marketing footer from all authenticated app views & active user workspaces
+  const isAuthRoute = AUTHENTICATED_ROUTES.some((route) =>
+    location.pathname.startsWith(route)
+  );
+  if (isAuthRoute || (currentUser && location.pathname !== '/' && !location.pathname.startsWith('/request'))) {
     return null;
   }
   return (
