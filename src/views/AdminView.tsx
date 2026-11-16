@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useBloodStore } from '../store/useBloodStore';
-import { UserRole, BloodGroup, BloodComponent, UrgencyLevel, EmergencyRequest } from '../types';
+import { UserRole, BloodGroup, BloodComponent, UrgencyLevel, EmergencyRequest, Donor } from '../types';
 import { RegisteredHospital, HospitalApprovalStatus } from '../types/hospital';
 import { WorkspaceHeader } from '../components/common/WorkspaceHeader';
 import { StatCard } from '../components/common/StatCard';
@@ -58,7 +58,15 @@ export type AdminSection =
   | 'settings';
 
 export const AdminView: React.FC = () => {
-  const { bloodCentres, requests, events, donors, currentUser, isOffline } = useBloodStore();
+  const {
+    bloodCentres,
+    requests,
+    events,
+    donors,
+    currentUser,
+    isOffline,
+    reviewDonorMedicalClearance,
+  } = useBloodStore();
 
   const [activeSection, setActiveSection] = useState<AdminSection>('overview');
   const [users, setUsers] = useState<AdminManagedUser[]>([]);
@@ -77,6 +85,49 @@ export const AdminView: React.FC = () => {
   const [selectedHospitalForReview, setSelectedHospitalForReview] = useState<RegisteredHospital | null>(null);
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
+  // Donor Medical Clearance Review Modal State
+  const [selectedDonorForClearance, setSelectedDonorForClearance] = useState<Donor | null>(null);
+  const [clearanceDecision, setClearanceDecision] = useState<'APPROVED' | 'REJECTED' | 'DEFERRED'>('APPROVED');
+  const [clearanceReason, setClearanceReason] = useState('');
+  const [clearanceNotes, setClearanceNotes] = useState('');
+  const [clearanceDeferralDate, setClearanceDeferralDate] = useState('');
+  const [clearanceSubmitting, setClearanceSubmitting] = useState(false);
+  const [clearanceFilter, setClearanceFilter] = useState<string>('ALL');
+
+  const handleClearanceReview = async () => {
+    if (!selectedDonorForClearance) return;
+    if (!clearanceReason.trim()) {
+      setUserOpError('A clinical justification reason is required.');
+      return;
+    }
+    setClearanceSubmitting(true);
+    setUserOpError(null);
+    try {
+      const res = await reviewDonorMedicalClearance(
+        selectedDonorForClearance.id,
+        clearanceDecision,
+        clearanceReason,
+        clearanceNotes,
+        clearanceDecision === 'DEFERRED' ? clearanceDeferralDate : undefined
+      );
+      if (res.success) {
+        setUserOpSuccess(
+          `Donor "${selectedDonorForClearance.fullName}" medical clearance marked as ${clearanceDecision}.`
+        );
+        setSelectedDonorForClearance(null);
+        setClearanceReason('');
+        setClearanceNotes('');
+        setClearanceDeferralDate('');
+      } else {
+        setUserOpError(res.error || 'Failed to submit medical clearance review.');
+      }
+    } catch (err: any) {
+      setUserOpError(err?.message || 'Error submitting medical clearance review.');
+    } finally {
+      setClearanceSubmitting(false);
+    }
+  };
 
   // Load Users & Hospitals
   useEffect(() => {
@@ -667,10 +718,30 @@ export const AdminView: React.FC = () => {
       {/* SECTION 6: DONOR MANAGEMENT & NBTC DEFERRALS */}
       {activeSection === 'donors' && (
         <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle overflow-hidden space-y-4">
-          <div className="p-4 border-b border-app-border bg-app-muted/30">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
-              Volunteer Donor Roster & NBTC 2023 Interval Eligibility
-            </h3>
+          <div className="p-4 border-b border-app-border bg-app-muted/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
+                Volunteer Donor Roster & Medical Clearance Governance
+              </h3>
+              <p className="text-[11px] text-app-text-secondary mt-0.5">
+                Audit donor eligibility, review medical clearance holds, and enforce NBTC 2023 donation intervals.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-app-text-secondary font-medium">Filter:</span>
+              <select
+                aria-label="Filter donors by clearance status"
+                value={clearanceFilter}
+                onChange={(e) => setClearanceFilter(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg border border-app-border bg-app-surface text-xs font-semibold text-app-text focus:outline-none focus:border-brand"
+              >
+                <option value="ALL">All Donors ({donors.length})</option>
+                <option value="PENDING_REVIEW">Holds Pending Review ({donors.filter((d) => !d.isMedicallyCleared || d.medicalClearanceStatus === 'PENDING_REVIEW').length})</option>
+                <option value="APPROVED">Cleared / Verified ({donors.filter((d) => d.isMedicallyCleared).length})</option>
+                <option value="DEFERRED">Deferred ({donors.filter((d) => d.medicalClearanceStatus === 'DEFERRED').length})</option>
+                <option value="REJECTED">Rejected ({donors.filter((d) => d.medicalClearanceStatus === 'REJECTED').length})</option>
+              </select>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-app-text">
@@ -682,40 +753,92 @@ export const AdminView: React.FC = () => {
                   <th scope="col" className="py-3 px-4 font-semibold">Total Donations</th>
                   <th scope="col" className="py-3 px-4 font-semibold">Availability</th>
                   <th scope="col" className="py-3 px-4 font-semibold">Interval Eligibility</th>
+                  <th scope="col" className="py-3 px-4 font-semibold">Medical Clearance</th>
+                  <th scope="col" className="py-3 px-4 font-semibold text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-app-border">
-                {donors.map((d) => {
-                  const elig = evaluateDonorEligibility(d);
-                  return (
-                    <tr key={d.id} className="hover:bg-app-muted/30 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-app-text">{d.fullName}</td>
-                      <td className="py-3.5 px-4 font-extrabold text-brand font-display">{d.bloodGroup}</td>
-                      <td className="py-3.5 px-4">{d.city}</td>
-                      <td className="py-3.5 px-4 font-mono">{d.totalDonations} Donations</td>
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                            d.isAvailable ? 'bg-success-light text-success border border-success-border' : 'bg-app-muted'
-                          }`}
-                        >
-                          {d.isAvailable ? 'Available' : 'Paused'}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 font-semibold">
-                        {elig.isEligible ? (
-                          <span className="text-success inline-flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Eligible
+                {donors
+                  .filter((d) => {
+                    if (clearanceFilter === 'ALL') return true;
+                    if (clearanceFilter === 'PENDING_REVIEW') return !d.isMedicallyCleared || d.medicalClearanceStatus === 'PENDING_REVIEW';
+                    if (clearanceFilter === 'APPROVED') return d.isMedicallyCleared;
+                    return d.medicalClearanceStatus === clearanceFilter;
+                  })
+                  .map((d) => {
+                    const elig = evaluateDonorEligibility(d);
+                    const isHold = !d.isMedicallyCleared;
+                    return (
+                      <tr key={d.id} className="hover:bg-app-muted/30 transition-colors">
+                        <td className="py-3.5 px-4 font-bold text-app-text">
+                          <div>
+                            <span>{d.fullName}</span>
+                            {d.medicalReviewNotes && (
+                              <p className="text-[10px] text-app-text-secondary font-mono truncate max-w-xs mt-0.5">
+                                Note: {d.medicalReviewNotes}
+                              </p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-extrabold text-brand font-display">{d.bloodGroup}</td>
+                        <td className="py-3.5 px-4">{d.city}</td>
+                        <td className="py-3.5 px-4 font-mono">{d.totalDonations} Donations</td>
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                              d.isAvailable ? 'bg-success-light text-success border border-success-border' : 'bg-app-muted'
+                            }`}
+                          >
+                            {d.isAvailable ? 'Available' : 'Paused'}
                           </span>
-                        ) : (
-                          <span className="text-warning-dark inline-flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" /> Deferral Active ({elig.daysRemaining || 0}d)
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold">
+                          {elig.isEligible ? (
+                            <span className="text-success inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Eligible
+                            </span>
+                          ) : (
+                            <span className="text-warning-dark inline-flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5" /> Deferral Active ({elig.daysRemaining || 0}d)
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold">
+                          {d.isMedicallyCleared ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-success-light text-success border border-success-border inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Cleared
+                            </span>
+                          ) : d.medicalClearanceStatus === 'DEFERRED' ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-warning-light text-warning-dark border border-warning-border inline-flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> Deferred
+                            </span>
+                          ) : d.medicalClearanceStatus === 'REJECTED' ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-50 text-emergency border border-red-200 inline-flex items-center gap-1">
+                              <XCircle className="w-3 h-3" /> Rejected
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-warning-dark text-white inline-flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" /> Hold: Pending
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDonorForClearance(d);
+                              setClearanceDecision(d.isMedicallyCleared ? 'APPROVED' : 'APPROVED');
+                              setClearanceReason(d.medicalReviewReason || '');
+                              setClearanceNotes(d.medicalReviewNotes || '');
+                            }}
+                            className="px-2.5 py-1 rounded bg-brand/10 hover:bg-brand/20 text-brand font-bold text-xs transition-colors"
+                          >
+                            {isHold ? 'Review Hold' : 'Edit Clearance'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
@@ -1027,6 +1150,158 @@ export const AdminView: React.FC = () => {
                 className="px-4 py-2 rounded-xl bg-success text-white font-bold hover:bg-success/90"
               >
                 Approve & Certify
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Donor Medical Clearance Review Modal */}
+      {selectedDonorForClearance && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-app-surface border border-app-border rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-5 animate-scale-up text-xs">
+            <div className="flex items-center justify-between border-b border-app-border pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-brand" />
+                <h3 className="text-sm font-bold text-app-text font-display">
+                  Review Donor Medical Clearance
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedDonorForClearance(null)}
+                className="text-app-text-secondary hover:text-app-text p-1 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="space-y-2 p-3 rounded-xl bg-app-muted/30 border border-app-border">
+              <div className="flex items-center justify-between">
+                <p className="font-bold text-app-text text-sm">{selectedDonorForClearance.fullName}</p>
+                <span className="text-brand font-extrabold text-sm">{selectedDonorForClearance.bloodGroup}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-app-border text-[11px] text-app-text-secondary">
+                <span>City: <strong className="text-app-text">{selectedDonorForClearance.city}</strong></span>
+                <span>Phone: <strong className="text-app-text">{selectedDonorForClearance.phone}</strong></span>
+                <span>Age: <strong className="text-app-text">{selectedDonorForClearance.age || 'Unspecified'} yrs</strong></span>
+                <span>Weight: <strong className="text-app-text">{selectedDonorForClearance.weightKg || '≥45'} kg</strong></span>
+                <span>Current Status: <strong className="text-app-text">{selectedDonorForClearance.medicalClearanceStatus || 'PENDING_REVIEW'}</strong></span>
+                <span>Total Donations: <strong className="text-app-text">{selectedDonorForClearance.totalDonations}</strong></span>
+              </div>
+              {selectedDonorForClearance.medicalReviewNotes && (
+                <div className="pt-2 border-t border-app-border">
+                  <span className="text-[10px] font-bold text-app-text-secondary uppercase">Donor's Notes / Submissions:</span>
+                  <p className="text-[11px] text-app-text mt-0.5">{selectedDonorForClearance.medicalReviewNotes}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block font-bold text-app-text mb-1">
+                  Clinical Clearance Decision
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setClearanceDecision('APPROVED')}
+                    className={`py-2 px-3 rounded-xl font-bold border transition-colors ${
+                      clearanceDecision === 'APPROVED'
+                        ? 'bg-success text-white border-success'
+                        : 'bg-app-surface text-app-text border-app-border hover:bg-app-muted'
+                    }`}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClearanceDecision('DEFERRED')}
+                    className={`py-2 px-3 rounded-xl font-bold border transition-colors ${
+                      clearanceDecision === 'DEFERRED'
+                        ? 'bg-warning-dark text-white border-warning-dark'
+                        : 'bg-app-surface text-app-text border-app-border hover:bg-app-muted'
+                    }`}
+                  >
+                    Defer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClearanceDecision('REJECTED')}
+                    className={`py-2 px-3 rounded-xl font-bold border transition-colors ${
+                      clearanceDecision === 'REJECTED'
+                        ? 'bg-emergency text-white border-emergency'
+                        : 'bg-app-surface text-app-text border-app-border hover:bg-app-muted'
+                    }`}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+
+              {clearanceDecision === 'DEFERRED' && (
+                <div>
+                  <label className="block font-bold text-app-text mb-1">
+                    Deferral End Date (NBTC Clinical Standard)
+                  </label>
+                  <input
+                    type="date"
+                    value={clearanceDeferralDate}
+                    onChange={(e) => setClearanceDeferralDate(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-app-border bg-app-surface text-app-text text-xs"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-app-text mb-1">
+                  Documented Justification Reason (Mandatory Audit Trail)
+                </label>
+                <input
+                  type="text"
+                  value={clearanceReason}
+                  onChange={(e) => setClearanceReason(e.target.value)}
+                  placeholder="e.g. Identity verified, age & weight criteria verified, vitals clear per NBTC."
+                  className="w-full p-2.5 rounded-xl border border-app-border bg-app-surface text-app-text text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-app-text mb-1">
+                  Clinical / Pathologist Notes (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={clearanceNotes}
+                  onChange={(e) => setClearanceNotes(e.target.value)}
+                  placeholder="Optional internal pathologist notes, screening test references..."
+                  className="w-full p-2.5 rounded-xl border border-app-border bg-app-surface text-app-text text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-app-border">
+              <button
+                type="button"
+                onClick={() => setSelectedDonorForClearance(null)}
+                className="px-3.5 py-2 rounded-xl border border-app-border bg-app-surface text-app-text font-bold hover:bg-app-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={clearanceSubmitting}
+                onClick={handleClearanceReview}
+                className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white font-bold transition-colors flex items-center gap-1.5"
+              >
+                {clearanceSubmitting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <span>Submit Clearance Decision</span>
+                )}
               </button>
             </div>
           </div>

@@ -10,7 +10,10 @@ interface EmergencyCardProps {
   isAssigned?: boolean;
   isLoading?: boolean;
   errorMessage?: string | null;
+  errorCode?: string | null;
+  isMedicallyCleared?: boolean;
   onRespond: (status: 'ACCEPTED' | 'DECLINED') => void;
+  onRequestClearanceReview?: () => void;
 }
 
 export const EmergencyCard: React.FC<EmergencyCardProps> = ({
@@ -20,8 +23,38 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
   isAssigned = false,
   isLoading = false,
   errorMessage,
+  errorCode,
+  isMedicallyCleared = true,
   onRespond,
+  onRequestClearanceReview,
 }) => {
+  const isMedicalHold =
+    errorCode === 'MEDICAL_CLEARANCE_HOLD' ||
+    Boolean(errorMessage && errorMessage.toLowerCase().includes('medical clearance hold'));
+  const isSelfMatch =
+    errorCode === 'ANTI_SELF_MATCH' ||
+    Boolean(errorMessage && errorMessage.includes('ANTI_SELF_MATCH'));
+  const isDeferral =
+    errorCode === 'ACTIVE_DEFERRAL' ||
+    Boolean(errorMessage && errorMessage.toLowerCase().includes('deferral'));
+  const isFulfilled =
+    errorCode === 'CAPACITY_REACHED' ||
+    Boolean(
+      errorMessage &&
+        (errorMessage.toLowerCase().includes('capacity') ||
+          errorMessage.toLowerCase().includes('fulfilled') ||
+          errorMessage.toLowerCase().includes('coordinated'))
+    );
+
+  const errorTitle = isMedicalHold
+    ? 'Medical Clearance Hold Active'
+    : isSelfMatch
+    ? 'Self-Acceptance Blocked'
+    : isDeferral
+    ? 'Donation Deferral Active'
+    : isFulfilled
+    ? 'Request Already Fulfilled'
+    : 'Acceptance Blocked';
   return (
     <div className="bg-app-surface rounded-xl border border-app-border p-5 shadow-card space-y-4 hover:border-brand/30 transition-all">
       {/* Header Info */}
@@ -39,6 +72,11 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
               }`}>
               {request.urgency}
             </span>
+            {!isMedicallyCleared && (
+              <span className="text-[10px] bg-warning-light text-warning-dark font-bold px-2 py-0.5 rounded-md border border-warning-border">
+                Clearance Pending
+              </span>
+            )}
           </div>
           <p className="text-xs text-app-text-secondary font-mono mt-1">
             Reference: <strong>{request.referenceCode}</strong> • Verification: Source-Verified Hospital
@@ -82,11 +120,27 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
 
       {/* Error Message Alert */}
       {errorMessage && (
-        <div className="p-3 rounded-lg text-xs bg-red-50 text-emergency border border-red-200 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-          <div>
-            <strong className="block font-semibold">Response Unavailable</strong>
+        <div className="p-3.5 rounded-lg text-xs bg-red-50 text-emergency border border-red-200 flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-emergency" />
+          <div className="space-y-1 w-full">
+            <strong className="block font-bold text-red-900">{errorTitle}</strong>
             <p className="text-[11px] text-red-800 leading-relaxed">{errorMessage}</p>
+            {isMedicalHold && (
+              <div className="pt-1.5 flex items-center gap-2">
+                <span className="text-[10px] bg-warning-light text-warning-dark font-bold px-2 py-0.5 rounded border border-warning-border">
+                  Action Required: Clinical Review
+                </span>
+                {onRequestClearanceReview && (
+                  <button
+                    type="button"
+                    onClick={onRequestClearanceReview}
+                    className="text-[11px] font-bold text-brand hover:underline"
+                  >
+                    Request Clearance Review →
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -92,6 +92,7 @@ export const DonorView: React.FC = () => {
     isRegisteredDonor,
     updateDonorContactInfo,
     requestClinicalCorrection,
+    requestMedicalClearanceReview,
   } = useBloodStore();
 
   const navigate = useNavigate();
@@ -123,6 +124,12 @@ export const DonorView: React.FC = () => {
   }, [refreshRequests]);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
+  const [cardErrorCodes, setCardErrorCodes] = useState<Record<string, string>>({});
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewSuccessMsg, setReviewSuccessMsg] = useState<string | null>(null);
+  const [reviewErrorMsg, setReviewErrorMsg] = useState<string | null>(null);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const [pushState, setPushState] = useState(fcmService.getState());
   useEffect(() => {
@@ -248,6 +255,11 @@ export const DonorView: React.FC = () => {
       delete next[requestId];
       return next;
     });
+    setCardErrorCodes((prev) => {
+      const next = { ...prev };
+      delete next[requestId];
+      return next;
+    });
 
     try {
       const res = await respondToEmergency(requestId, activeDonor.id, status, 'WEB');
@@ -267,6 +279,12 @@ export const DonorView: React.FC = () => {
             ...prev,
             [requestId]: res.error || 'Failed to accept emergency request.',
           }));
+          if (res.code) {
+            setCardErrorCodes((prev) => ({
+              ...prev,
+              [requestId]: res.code!,
+            }));
+          }
         }
       }
     } catch (err: any) {
@@ -276,6 +294,29 @@ export const DonorView: React.FC = () => {
       }));
     } finally {
       setRespondingId(null);
+    }
+  };
+
+  const handleRequestMedicalReview = async () => {
+    setIsSubmittingReview(true);
+    setReviewErrorMsg(null);
+    setReviewSuccessMsg(null);
+    try {
+      const res = await requestMedicalClearanceReview(reviewNotes);
+      if (res.success) {
+        setReviewSuccessMsg(res.message || 'Medical clearance review requested successfully.');
+        setTimeout(() => {
+          setIsReviewModalOpen(false);
+          setReviewSuccessMsg(null);
+          setReviewNotes('');
+        }, 2000);
+      } else {
+        setReviewErrorMsg(res.error || 'Failed to submit clearance review request.');
+      }
+    } catch (err: any) {
+      setReviewErrorMsg(err?.message || 'Error submitting review request.');
+    } finally {
+      setIsSubmittingReview(false);
     }
   };
 
@@ -661,6 +702,39 @@ export const DonorView: React.FC = () => {
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="space-y-6 animate-fade-in">
+          {/* Medical Clearance Hold Notice Banner */}
+          {!activeDonor.isMedicallyCleared && (
+            <div className="bg-warning-light/80 border border-warning-border rounded-xl p-4 sm:p-5 shadow-subtle flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-warning-dark shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-app-text font-display">
+                      Medical Clearance Hold Active
+                    </h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-warning-dark text-white uppercase font-mono">
+                      {activeDonor.medicalClearanceStatus || 'PENDING_REVIEW'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-app-text-secondary leading-relaxed">
+                    To ensure recipient and donor safety under NBTC standards, emergency blood request acceptance is locked until an authorized clinical coordinator or blood bank specialist reviews and approves your clearance.
+                  </p>
+                  {activeDonor.medicalReviewNotes && (
+                    <p className="text-[11px] text-app-text font-mono bg-app-surface/60 px-2 py-1 rounded border border-warning-border/50">
+                      Review Note: {activeDonor.medicalReviewNotes}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsReviewModalOpen(true)}
+                className="shrink-0 py-2 px-4 rounded-lg bg-warning-dark hover:bg-warning text-white text-xs font-bold transition-colors shadow-xs"
+              >
+                Request Clinical Review
+              </button>
+            </div>
+          )}
           {/* Hero Profile Status Card (Desktop only since Mobile Quick Card covers identity) */}
           <div className="hidden sm:block bg-app-surface border border-app-border rounded-2xl p-5 sm:p-6 shadow-subtle space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -771,6 +845,9 @@ export const DonorView: React.FC = () => {
                     approxDistanceKm={activeDonor.approxDistanceKm}
                     isLoading={respondingId === req.id}
                     errorMessage={cardErrors[req.id]}
+                    errorCode={cardErrorCodes[req.id]}
+                    isMedicallyCleared={activeDonor.isMedicallyCleared}
+                    onRequestClearanceReview={() => setIsReviewModalOpen(true)}
                     onRespond={(status) => handleRespond(req.id, status)}
                   />
                 ))}
@@ -815,6 +892,9 @@ export const DonorView: React.FC = () => {
                     isAssigned={isAssigned}
                     isLoading={respondingId === req.id}
                     errorMessage={cardErrors[req.id]}
+                    errorCode={cardErrorCodes[req.id]}
+                    isMedicallyCleared={activeDonor.isMedicallyCleared}
+                    onRequestClearanceReview={() => setIsReviewModalOpen(true)}
                     onRespond={(status) => handleRespond(req.id, status)}
                   />
                 );
@@ -1334,10 +1414,29 @@ export const DonorView: React.FC = () => {
               <div className="p-3.5 rounded-xl border border-app-border bg-app-muted/20 space-y-1 relative">
                 <span className="text-[10px] uppercase font-bold text-app-text-secondary flex items-center justify-between">
                   <span>Clinical Clearance</span>
-                  <CheckCircle2 className="w-3 h-3 text-success" />
+                  {activeDonor.isMedicallyCleared ? (
+                    <CheckCircle2 className="w-3 h-3 text-success" />
+                  ) : (
+                    <Clock className="w-3 h-3 text-warning-dark" />
+                  )}
                 </span>
-                <p className="text-sm font-bold text-success">CLINICALLY_VERIFIED</p>
-                <span className="text-[10px] text-app-text-secondary block">Donor Registry Active</span>
+                <p className={`text-sm font-bold ${activeDonor.isMedicallyCleared ? 'text-success' : 'text-warning-dark'}`}>
+                  {activeDonor.isMedicallyCleared
+                    ? 'CLINICALLY_VERIFIED'
+                    : (activeDonor.medicalClearanceStatus || 'PENDING_REVIEW')}
+                </p>
+                <span className="text-[10px] text-app-text-secondary block">
+                  {activeDonor.isMedicallyCleared ? 'Donor Registry Active' : 'Acceptance locked pending review'}
+                </span>
+                {!activeDonor.isMedicallyCleared && (
+                  <button
+                    type="button"
+                    onClick={() => setIsReviewModalOpen(true)}
+                    className="mt-1 text-[10px] font-bold text-brand hover:underline block"
+                  >
+                    Request Clearance Review →
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1580,6 +1679,99 @@ export const DonorView: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* Medical Clearance Review Request Modal */}
+      {isReviewModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clearance-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-app-text/60 backdrop-blur-sm animate-fade-in"
+        >
+          <div className="bg-app-surface rounded-2xl max-w-md w-full border border-app-border p-6 shadow-elevated space-y-5 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-app-border pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-brand" />
+                <h3 id="clearance-modal-title" className="text-base font-bold text-app-text font-display">
+                  Request Medical Clearance Review
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsReviewModalOpen(false);
+                  setReviewErrorMsg(null);
+                  setReviewSuccessMsg(null);
+                }}
+                className="text-app-text-secondary hover:text-app-text p-1 rounded-lg transition-colors"
+                aria-label="Close dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-app-text-secondary leading-relaxed">
+              <div className="p-3 rounded-xl bg-info-light border border-info-border text-info text-xs space-y-1">
+                <strong className="block font-bold text-app-text">NBTC Clinical Safety Review Protocol</strong>
+                <p>
+                  CareLoop requires authorized clinical coordinator verification of whole blood donation intervals, minimum weight (≥45 kg), and medical criteria before emergency dispatch acceptance can be enabled.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-app-text">
+                  Supplementary Notes or Transfusion Center Lab ID (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={reviewNotes}
+                  onChange={(e) => setReviewNotes(e.target.value)}
+                  placeholder="e.g. Registered at Red Cross Vijayawada, donor card #RC-8812, hemoglobin screened last month."
+                  className="w-full text-xs p-3 rounded-xl border border-app-border bg-app-surface focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand text-app-text placeholder:text-app-text-secondary/60"
+                />
+              </div>
+
+              {reviewErrorMsg && (
+                <div className="p-3 rounded-lg bg-red-50 text-emergency border border-red-200 text-xs">
+                  {reviewErrorMsg}
+                </div>
+              )}
+
+              {reviewSuccessMsg && (
+                <div className="p-3 rounded-lg bg-success-light text-success border border-success-border text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{reviewSuccessMsg}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-app-border">
+              <button
+                type="button"
+                onClick={() => setIsReviewModalOpen(false)}
+                className="py-2.5 px-4 rounded-xl border border-app-border text-app-text text-xs font-bold hover:bg-app-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingReview}
+                onClick={handleRequestMedicalReview}
+                className="py-2.5 px-5 rounded-xl bg-brand hover:bg-brand-dark text-white text-xs font-bold transition-colors shadow-xs flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSubmittingReview ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Submitting...</span>
+                  </>
+                ) : (
+                  <span>Submit Clearance Request</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <DonorOnboardingModal
         isOpen={isOnboardingModalOpen}

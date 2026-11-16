@@ -18,6 +18,11 @@ export interface AcceptRequestResult {
   donorName?: string;
   alreadyAccepted?: boolean;
   error?: string;
+  code?: string;
+  details?: string;
+  actionRequired?: string;
+  clearanceStatus?: string;
+  status?: string;
 }
 
 export interface DonorOnboardingInput {
@@ -110,9 +115,21 @@ export function mapDbToDonor(row: any): Donor {
     isAvailable: Boolean(row.is_available),
     lastDonatedAt: row.last_donated_at ?? undefined,
     lastDonatedComponent: (row.last_donated_component as BloodComponent) ?? undefined,
-    isMedicallyCleared: Boolean(row.is_medically_cleared ?? true),
+    isMedicallyCleared: Boolean(row.is_medically_cleared),
+    medicalClearanceStatus:
+      (row.medical_clearance_status as any) ||
+      (row.is_medically_cleared ? 'APPROVED' : 'PENDING_REVIEW'),
+    medicalReviewRequestedAt: row.medical_review_requested_at ?? undefined,
+    medicalReviewedBy: row.medical_reviewed_by ?? undefined,
+    medicalReviewedAt: row.medical_reviewed_at ?? undefined,
+    medicalReviewDecision: row.medical_review_decision ?? undefined,
+    medicalReviewReason: row.medical_review_reason ?? undefined,
+    medicalReviewNotes: row.medical_review_notes ?? undefined,
     deferralUntil: row.deferral_until ?? undefined,
     weightKg: row.weight_kg != null ? Number(row.weight_kg) : undefined,
+    age: row.age != null ? Number(row.age) : undefined,
+    gender: row.gender ?? undefined,
+    sex: row.gender ?? undefined,
     totalDonations: Number(row.total_donations ?? 0),
     registeredAt: row.created_at,
   };
@@ -263,6 +280,10 @@ export async function acceptRequestAndCreateConversation(
           return {
             success: false,
             error: errData.error || 'Failed to accept emergency request.',
+            code: errData.code,
+            details: errData.details,
+            actionRequired: errData.actionRequired,
+            clearanceStatus: errData.clearanceStatus,
           };
         }
       }
@@ -282,13 +303,45 @@ export async function acceptRequestAndCreateConversation(
     const { data, error } = await supabase.rpc('accept_request_and_create_conversation', params);
 
     if (error) {
-      return { success: false, error: error.message };
+      const msg = error.message || '';
+      let code = 'ACCEPTANCE_FAILED';
+      let details: string | undefined;
+      let actionRequired: string | undefined;
+      let clearanceStatus: string | undefined;
+
+      if (msg.includes('medical clearance hold')) {
+        code = 'MEDICAL_CLEARANCE_HOLD';
+        clearanceStatus = 'PENDING_REVIEW';
+        actionRequired = 'REQUEST_MEDICAL_CLEARANCE';
+        details = 'Your volunteer donor registration is awaiting clinical verification by an authorized coordinator or transfusion medicine department before emergency dispatch acceptance can be enabled.';
+      } else if (msg.includes('cannot respond to or accept their own')) {
+        code = 'ANTI_SELF_MATCH';
+      } else if (msg.includes('deferral') || msg.includes('Inter-donation interval')) {
+        code = 'ACTIVE_DEFERRAL';
+      } else if (msg.includes('fully coordinated') || msg.includes('capacity')) {
+        code = 'CAPACITY_REACHED';
+      } else if (msg.includes('temporarily unavailable')) {
+        code = 'DONOR_UNAVAILABLE';
+      } else if (msg.includes('incompatible')) {
+        code = 'INCOMPATIBLE_BLOOD_GROUP';
+      }
+
+      return {
+        success: false,
+        error: error.message,
+        code,
+        details,
+        actionRequired,
+        clearanceStatus,
+      };
     }
 
     // The RPC returns a JSONB payload
     const result = data as {
       success: boolean;
       message?: string;
+      code?: string;
+      clearance_status?: string;
       conversation_id?: string;
       request_id?: string;
       donor_name?: string;
@@ -296,9 +349,16 @@ export async function acceptRequestAndCreateConversation(
     };
 
     if (!result || result.success === false) {
+      const isHold = result?.code === 'MEDICAL_CLEARANCE_HOLD' || result?.message?.includes('medical clearance hold');
       return {
         success: false,
         error: result?.message || 'Failed to accept emergency request.',
+        code: result?.code || (isHold ? 'MEDICAL_CLEARANCE_HOLD' : 'ACCEPTANCE_FAILED'),
+        clearanceStatus: result?.clearance_status || (isHold ? 'PENDING_REVIEW' : undefined),
+        details: isHold
+          ? 'Your volunteer donor registration is awaiting clinical verification by an authorized coordinator or transfusion medicine department before emergency dispatch acceptance can be enabled.'
+          : undefined,
+        actionRequired: isHold ? 'REQUEST_MEDICAL_CLEARANCE' : undefined,
       };
     }
 
@@ -310,11 +370,116 @@ export async function acceptRequestAndCreateConversation(
       conversationRoute: conversationId ? `/communication?conversationId=${conversationId}` : '/communication',
       donorName: result.donor_name,
       alreadyAccepted: Boolean(result.already_accepted),
+      status: (result as any).status || 'ACCEPTED',
     };
   } catch (err: any) {
     return {
       success: false,
-      error: err?.message || 'Network error during donor acceptance.',
+      error: err?.message || 'Unexpected error occurred during acceptance procedure.',
+    };
+  }
+}
+
+/**
+ * Request Medical Clearance Review
+ * Submits a clearance review request for the authenticated donor profile.
+ */
+export async function requestMedicalClearanceReview(
+  notes?: string
+): Promise<{ success: boolean; code?: string; message?: string; error?: string; data?: any }> {
+  try {
+    const { data, error } = await supabase.rpc('request_donor_medical_clearance_review', {
+      p_notes: notes || null,
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const res = data as any;
+    return {
+      success: Boolean(res?.success),
+      code: res?.code || (res?.success ? 'REVIEW_REQUESTED' : undefined),
+      message: res?.message,
+      error: res?.success === false ? res?.message : undefined,
+      data: res,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Failed to request medical clearance review.',
+    };
+  }
+}
+
+/**
+ * Review Donor Medical Clearance (Authorized Clinical/Admin action)
+ * Executes review_donor_medical_clearance RPC with decision, reason, notes, and audit.
+ */
+export async function reviewDonorMedicalClearance(
+  donorId: string,
+  decision: 'APPROVED' | 'REJECTED' | 'DEFERRED',
+  reason: string,
+  notes?: string,
+  deferralUntil?: string
+): Promise<{ success: boolean; decision?: string; error?: string; message?: string; data?: any }> {
+  if (!donorId) {
+    return { success: false, error: 'Donor ID is required.' };
+  }
+  if (!reason || reason.trim().length === 0) {
+    return { success: false, error: 'A documented clinical justification reason is required.' };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('review_donor_medical_clearance', {
+      p_donor_id: donorId,
+      p_decision: decision,
+      p_reason: reason.trim(),
+      p_notes: notes?.trim() || null,
+      p_deferral_until: deferralUntil || null,
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const res = data as any;
+    if (!res || res.success === false) {
+      return { success: false, error: res?.message || 'Failed to review donor medical clearance.' };
+    }
+
+    return {
+      success: true,
+      decision: res.decision,
+      message: res.message,
+      data: res,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Failed to submit medical clearance review.',
+    };
+  }
+}
+
+/**
+ * Fetch Pending Medical Clearances (Authorized Clinical/Admin action)
+ */
+export async function getPendingMedicalClearances(): Promise<{
+  success: boolean;
+  data?: any[];
+  error?: string;
+}> {
+  try {
+    const { data, error } = await supabase.rpc('get_pending_medical_clearances');
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Failed to load medical clearance queue.',
     };
   }
 }

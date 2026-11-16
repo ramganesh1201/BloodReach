@@ -400,25 +400,63 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       } else {
         const msg = rpcData.message || 'Failed to accept emergency request.';
         let statusCode = 400;
+        let errorCode = rpcData.code || 'ACCEPTANCE_FAILED';
+        let errorDetails: string | undefined = undefined;
+        let actionRequired: string | undefined = undefined;
 
-        if (msg.includes('not found')) {
-          statusCode = 404;
-        } else if (msg.includes('ANTI_SELF_MATCH')) {
+        if (errorCode === 'MEDICAL_CLEARANCE_HOLD' || msg.includes('medical clearance hold')) {
+          errorCode = 'MEDICAL_CLEARANCE_HOLD';
+          statusCode = 400;
+          errorDetails =
+            'Your volunteer donor registration is awaiting clinical verification by an authorized coordinator or transfusion medicine department before emergency dispatch acceptance can be enabled.';
+          actionRequired = 'REQUEST_MEDICAL_CLEARANCE';
+        } else if (errorCode === 'ANTI_SELF_MATCH' || msg.includes('ANTI_SELF_MATCH')) {
+          errorCode = 'ANTI_SELF_MATCH';
           statusCode = 403;
-        } else if (msg.includes('Authentication required')) {
-          statusCode = 401;
+          errorDetails = 'Donors cannot accept emergency requests created by their own user account.';
+        } else if (errorCode === 'ACTIVE_DEFERRAL' || msg.includes('deferral')) {
+          errorCode = 'ACTIVE_DEFERRAL';
+          statusCode = 409;
+          errorDetails = 'Active NBTC medical interval or temporary deferral period has not elapsed.';
+        } else if (errorCode === 'DONOR_UNAVAILABLE' || msg.includes('unavailable')) {
+          errorCode = 'DONOR_UNAVAILABLE';
+          statusCode = 400;
+          errorDetails = 'Donor status is set to unavailable or paused in the dispatch grid.';
+        } else if (errorCode === 'INCOMPATIBLE_BLOOD_GROUP' || msg.includes('Incompatible')) {
+          errorCode = 'INCOMPATIBLE_BLOOD_GROUP';
+          statusCode = 400;
+          errorDetails = 'ABO/Rh or blood component is not clinically compatible with the patient request.';
         } else if (
+          errorCode === 'CAPACITY_REACHED' ||
           msg.includes('no longer active') ||
           msg.includes('coordinated') ||
           msg.includes('capacity') ||
           msg.includes('FULFILLED')
         ) {
+          errorCode = 'CAPACITY_REACHED';
           statusCode = 409;
+          errorDetails = 'This emergency request has reached capacity or is no longer accepting commitments.';
+        } else if (errorCode === 'REQUEST_NOT_FOUND' || msg.includes('not found')) {
+          errorCode = 'REQUEST_NOT_FOUND';
+          statusCode = 404;
+        } else if (errorCode === 'UNAUTHORIZED' || msg.includes('Authentication required')) {
+          errorCode = 'UNAUTHORIZED';
+          statusCode = 401;
         }
 
         res.statusCode = statusCode;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ success: false, error: msg }));
+        res.end(
+          JSON.stringify({
+            success: false,
+            code: errorCode,
+            error: msg,
+            details: errorDetails,
+            actionRequired,
+            clearanceStatus: rpcData.clearance_status || (errorCode === 'MEDICAL_CLEARANCE_HOLD' ? 'PENDING_REVIEW' : undefined),
+            deferralUntil: rpcData.deferral_until,
+          })
+        );
         return;
       }
     }

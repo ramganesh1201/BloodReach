@@ -576,7 +576,21 @@ interface BloodStoreContextType {
   updateRequestStatus: (requestId: string, status: EmergencyRequest['status'], description: string, actorRole?: string) => void;
 
   // Donor Response & Atomic Assignment
-  respondToEmergency: (requestId: string, donorId: string, responseStatus: 'ACCEPTED' | 'DECLINED', channel?: 'WEB' | 'SMS') => Promise<{ success: boolean; conversationId?: string; conversationRoute?: string; error?: string }>;
+  respondToEmergency: (
+    requestId: string,
+    donorId: string,
+    responseStatus: 'ACCEPTED' | 'DECLINED',
+    channel?: 'WEB' | 'SMS'
+  ) => Promise<{
+    success: boolean;
+    conversationId?: string;
+    conversationRoute?: string;
+    error?: string;
+    code?: string;
+    details?: string;
+    actionRequired?: string;
+    clearanceStatus?: string;
+  }>;
   assignDonorToRequest: (requestId: string, donorId: string, units?: number, coordinatorId?: string, notes?: string) => Promise<{ success: boolean; message: string }>;
   cancelDonorAssignment: (assignmentId: string, reason?: string) => Promise<void>;
   toggleDonorAvailability: (donorId: string) => void;
@@ -586,6 +600,9 @@ interface BloodStoreContextType {
   isRegisteredDonor: boolean;
   updateDonorContactInfo: (donorId: string, updates: { phone?: string; city?: string; district?: string; isAvailable?: boolean }) => Promise<{ success: boolean; data?: Donor; error?: string }>;
   requestClinicalCorrection: (donorId: string, request: { field: string; requestedValue: string; reason: string; certificateNotes?: string }) => Promise<{ success: boolean; message: string; error?: string }>;
+  requestMedicalClearanceReview: (notes?: string) => Promise<{ success: boolean; code?: string; message?: string; error?: string }>;
+  reviewDonorMedicalClearance: (donorId: string, decision: 'APPROVED' | 'REJECTED' | 'DEFERRED', reason: string, notes?: string, deferralUntil?: string) => Promise<{ success: boolean; decision?: string; message?: string; error?: string }>;
+  getPendingMedicalClearances: () => Promise<{ success: boolean; data?: any[]; error?: string }>;
 
   // Blood Bank Operations
   updateInventory: (centreId: string, bloodGroup: BloodGroup, component: BloodComponent, newUnits: number) => Promise<void>;
@@ -600,7 +617,19 @@ interface BloodStoreContextType {
   activeCallSession: CallSession | null;
   isCallModalOpen: boolean;
   setActiveConversationId: (id: string | null) => void;
-  acceptRequestAndCreateConversation: (requestId: string, donorId: string) => Promise<{ success: boolean; conversationId?: string; conversationRoute?: string; error?: string }>;
+  acceptRequestAndCreateConversation: (
+    requestId: string,
+    donorId: string
+  ) => Promise<{
+    success: boolean;
+    conversationId?: string;
+    conversationRoute?: string;
+    error?: string;
+    code?: string;
+    details?: string;
+    actionRequired?: string;
+    clearanceStatus?: string;
+  }>;
   sendChatMessage: (conversationId: string, content: string, attachments?: MessageAttachment[]) => Promise<{ success: boolean; messageId: string }>;
   markConversationAsRead: (conversationId: string) => void;
   submitCoordinationEvent: (conversationId: string, eventType: CoordinationEventType, eventData?: Record<string, any>) => void;
@@ -2021,6 +2050,120 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return { success: true };
   };
 
+  // ============================================================================
+  // Medical Clearance Review & Clinical Governance Operations
+  // ============================================================================
+  const requestMedicalClearanceReview = useCallback(async (
+    notes?: string
+  ): Promise<{ success: boolean; code?: string; message?: string; error?: string }> => {
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      const res = await donorResponseService.requestMedicalClearanceReview(notes);
+      if (res.success && currentUser?.id) {
+        setDonors((prev) =>
+          prev.map((d) =>
+            d.profileId === currentUser.id
+              ? {
+                  ...d,
+                  medicalClearanceStatus: 'PENDING_REVIEW',
+                  medicalReviewRequestedAt: new Date().toISOString(),
+                  medicalReviewNotes: notes || d.medicalReviewNotes,
+                }
+              : d
+          )
+        );
+      }
+      return res;
+    }
+
+    if (currentUser?.id) {
+      setDonors((prev) =>
+        prev.map((d) =>
+          d.profileId === currentUser.id
+            ? {
+                ...d,
+                medicalClearanceStatus: 'PENDING_REVIEW',
+                medicalReviewRequestedAt: new Date().toISOString(),
+                medicalReviewNotes: notes,
+              }
+            : d
+        )
+      );
+    }
+    return { success: true, code: 'REVIEW_REQUESTED', message: 'Medical clearance review requested. A clinical coordinator will review your profile.' };
+  }, [dataSource, currentUser?.id]);
+
+  const reviewDonorMedicalClearance = useCallback(async (
+    donorId: string,
+    decision: 'APPROVED' | 'REJECTED' | 'DEFERRED',
+    reason: string,
+    notes?: string,
+    deferralUntil?: string
+  ): Promise<{ success: boolean; decision?: string; message?: string; error?: string }> => {
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      const res = await donorResponseService.reviewDonorMedicalClearance(
+        donorId,
+        decision,
+        reason,
+        notes,
+        deferralUntil
+      );
+      if (res.success) {
+        setDonors((prev) =>
+          prev.map((d) =>
+            d.id === donorId
+              ? {
+                  ...d,
+                  isMedicallyCleared: decision === 'APPROVED',
+                  medicalClearanceStatus: decision,
+                  deferralUntil: decision === 'DEFERRED' ? deferralUntil : d.deferralUntil,
+                  medicalReviewDecision: decision,
+                  medicalReviewReason: reason,
+                  medicalReviewNotes: notes,
+                  medicalReviewedAt: new Date().toISOString(),
+                  medicalReviewedBy: currentUser?.id,
+                }
+              : d
+          )
+        );
+      }
+      return res;
+    }
+
+    // Demo Mode fallback
+    setDonors((prev) =>
+      prev.map((d) =>
+        d.id === donorId
+          ? {
+              ...d,
+              isMedicallyCleared: decision === 'APPROVED',
+              medicalClearanceStatus: decision,
+              deferralUntil: decision === 'DEFERRED' ? (deferralUntil || new Date(Date.now() + 30 * 86400000).toISOString()) : undefined,
+              medicalReviewDecision: decision,
+              medicalReviewReason: reason,
+              medicalReviewNotes: notes,
+              medicalReviewedAt: new Date().toISOString(),
+              medicalReviewedBy: currentUser?.id,
+            }
+          : d
+      )
+    );
+    return { success: true, decision, message: `Donor medical clearance updated to ${decision}.` };
+  }, [dataSource, currentUser?.id]);
+
+  const getPendingMedicalClearances = useCallback(async (): Promise<{
+    success: boolean;
+    data?: any[];
+    error?: string;
+  }> => {
+    if (dataSource === 'database' && isSupabaseConfigured) {
+      return await donorResponseService.getPendingMedicalClearances();
+    }
+    return {
+      success: true,
+      data: donors.filter((d) => !d.isMedicallyCleared || d.medicalClearanceStatus !== 'APPROVED'),
+    };
+  }, [dataSource, donors]);
+
   const updateRequestStatus = (
     requestId: string,
     status: EmergencyRequest['status'],
@@ -2037,7 +2180,16 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const acceptRequestAndCreateConversation = useCallback(async (
     requestId: string,
     donorId: string
-  ): Promise<{ success: boolean; conversationId?: string; conversationRoute?: string; error?: string }> => {
+  ): Promise<{
+    success: boolean;
+    conversationId?: string;
+    conversationRoute?: string;
+    error?: string;
+    code?: string;
+    details?: string;
+    actionRequired?: string;
+    clearanceStatus?: string;
+  }> => {
     if (dataSource === 'database' && isSupabaseConfigured) {
       setBackendError(null);
       const rpcRes = await donorResponseService.acceptRequestAndCreateConversation(requestId, donorId);
@@ -2046,6 +2198,10 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return {
           success: false,
           error: rpcRes.error || 'Failed to accept emergency request.',
+          code: rpcRes.code,
+          details: rpcRes.details,
+          actionRequired: rpcRes.actionRequired,
+          clearanceStatus: rpcRes.clearanceStatus,
         };
       }
 
@@ -2074,6 +2230,18 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const donor = donors.find((d) => d.id === donorId);
     if (!req) return { success: false, error: 'Emergency request not found' };
     if (!donor) return { success: false, error: 'Donor record not found' };
+
+    // Enforce medical clearance hold in demo mode if unverified
+    if (donor.isMedicallyCleared === false) {
+      return {
+        success: false,
+        code: 'MEDICAL_CLEARANCE_HOLD',
+        clearanceStatus: donor.medicalClearanceStatus || 'PENDING_REVIEW',
+        error: 'Donor profile has an unresolved medical clearance hold.',
+        details: 'Your volunteer donor registration is awaiting clinical verification by an authorized coordinator or transfusion medicine department before emergency dispatch acceptance can be enabled.',
+        actionRequired: 'REQUEST_MEDICAL_CLEARANCE',
+      };
+    }
 
     const existingRespIndex = donorResponses.findIndex((r) => r.requestId === requestId && r.donorId === donorId);
     const newResponse: DonorResponse = {
@@ -2191,7 +2359,16 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     donorId: string,
     responseStatus: 'ACCEPTED' | 'DECLINED',
     channel: 'WEB' | 'SMS' = 'WEB'
-  ): Promise<{ success: boolean; conversationId?: string; conversationRoute?: string; error?: string }> => {
+  ): Promise<{
+    success: boolean;
+    conversationId?: string;
+    conversationRoute?: string;
+    error?: string;
+    code?: string;
+    details?: string;
+    actionRequired?: string;
+    clearanceStatus?: string;
+  }> => {
     if (responseStatus === 'ACCEPTED') {
       return await acceptRequestAndCreateConversation(requestId, donorId);
     }
@@ -3841,6 +4018,9 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         isRegisteredDonor,
         updateDonorContactInfo,
         requestClinicalCorrection,
+        requestMedicalClearanceReview,
+        reviewDonorMedicalClearance,
+        getPendingMedicalClearances,
         updateInventory,
         verifyAndFulfillRequest,
         sendMessage,

@@ -121,6 +121,13 @@ export interface Donor {
   lastDonatedAt?: string;
   lastDonatedComponent?: BloodComponent;
   isMedicallyCleared?: boolean;
+  medicalClearanceStatus?: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'DEFERRED';
+  medicalReviewRequestedAt?: string;
+  medicalReviewedBy?: string;
+  medicalReviewedAt?: string;
+  medicalReviewDecision?: 'APPROVED' | 'REJECTED' | 'DEFERRED';
+  medicalReviewReason?: string;
+  medicalReviewNotes?: string;
   deferralUntil?: string;
   weightKg?: number;
   age?: number;
@@ -138,6 +145,18 @@ export interface DonorResponse {
   responseStatus: 'NOTIFIED' | 'ACCEPTED' | 'DECLINED';
   responseChannel: 'WEB' | 'SMS';
   timestamp: string;
+}
+
+export interface DonorMedicalClearanceReview {
+  id: string;
+  donorId: string;
+  reviewerId: string;
+  reviewerName?: string;
+  decision: 'APPROVED' | 'REJECTED' | 'DEFERRED';
+  reason: string;
+  notes?: string;
+  deferralUntil?: string;
+  createdAt: string;
 }
 
 export interface DonorAssignment {
