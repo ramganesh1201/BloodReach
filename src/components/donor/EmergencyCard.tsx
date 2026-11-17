@@ -224,7 +224,7 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({
             onClick={() => onRespond('DECLINED')}
             className="w-full py-2.5 px-4 rounded-lg border border-app-border text-app-text font-bold text-xs hover:bg-app-muted disabled:opacity-50 transition-colors"
           >
-            Decline
+            {isLoading ? 'Declining...' : 'Decline'}
           </button>
           {!isMedicallyCleared ? (
             <button

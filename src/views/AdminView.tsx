@@ -67,6 +67,9 @@ export const AdminView: React.FC = () => {
     currentUser,
     isOffline,
     reviewDonorMedicalClearance,
+    inventory,
+    donorAssignments,
+    donorResponses,
   } = useBloodStore();
 
   const [activeSection, setActiveSection] = useState<AdminSection>('overview');
@@ -77,6 +80,10 @@ export const AdminView: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [hospitalStatusFilter, setHospitalStatusFilter] = useState<string>('ALL');
+  const [requestSearchTerm, setRequestSearchTerm] = useState('');
+  const [requestStatusFilter, setRequestStatusFilter] = useState<string>('ALL');
+  const [auditSearchTerm, setAuditSearchTerm] = useState('');
+  const [auditTypeFilter, setAuditTypeFilter] = useState<string>('ALL');
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [userOpError, setUserOpError] = useState<string | null>(null);
   const [userOpSuccess, setUserOpSuccess] = useState<string | null>(null);
@@ -302,6 +309,40 @@ export const AdminView: React.FC = () => {
     const matchesStatus =
       hospitalStatusFilter === 'ALL' || h.approvalStatus === hospitalStatusFilter;
     return matchesStatus;
+  });
+
+  // Filtered Requests with Search and Status Filter
+  const filteredRequests = requests.filter((r) => {
+    const term = requestSearchTerm.toLowerCase();
+    const matchesSearch =
+      !term ||
+      r.referenceCode.toLowerCase().includes(term) ||
+      r.hospitalName.toLowerCase().includes(term) ||
+      r.city.toLowerCase().includes(term) ||
+      r.bloodGroup.toLowerCase().includes(term) ||
+      r.component.toLowerCase().includes(term);
+    const matchesStatus = requestStatusFilter === 'ALL' || r.status === requestStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  // Aggregated Inventory Stock
+  const inventoryByGroup = (['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'] as BloodGroup[]).map((bg) => {
+    const items = inventory.filter((inv) => inv.bloodGroup === bg);
+    const totalUnits = items.reduce((acc, curr) => acc + (curr.units || 0), 0);
+    const isCritical = totalUnits <= (settings.criticalStockThreshold || 5);
+    return { bg, totalUnits, items, isCritical };
+  });
+
+  // Filtered Audit Events
+  const filteredEvents = events.filter((evt) => {
+    const term = auditSearchTerm.toLowerCase();
+    const matchesSearch =
+      !term ||
+      evt.description.toLowerCase().includes(term) ||
+      evt.eventType.toLowerCase().includes(term) ||
+      evt.actorRole.toLowerCase().includes(term);
+    const matchesType = auditTypeFilter === 'ALL' || evt.eventType === auditTypeFilter;
+    return matchesSearch && matchesType;
   });
 
   // Metrics Calculations
@@ -734,7 +775,7 @@ export const AdminView: React.FC = () => {
       {/* SECTION 5: EMERGENCY REQUESTS */}
       {activeSection === 'requests' && (
         <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle p-5 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-app-border pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-app-border pb-3 gap-3">
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
                 Network-wide Emergency Requests
@@ -743,40 +784,84 @@ export const AdminView: React.FC = () => {
                 Real-time visibility across all urgent patient blood requests.
               </p>
             </div>
-            <span className="text-xs font-mono bg-app-muted px-2 py-0.5 rounded border border-app-border">
-              {requests.length} Requests
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono bg-app-muted px-2 py-0.5 rounded border border-app-border">
+                {filteredRequests.length} of {requests.length} Requests
+              </span>
+            </div>
+          </div>
+
+          {/* Search & Status Filters */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 text-app-text-secondary absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search reference, hospital, city, blood group..."
+                value={requestSearchTerm}
+                onChange={(e) => setRequestSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-app-border bg-app-surface text-xs text-app-text focus:outline-none focus:border-brand"
+              />
+              {requestSearchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setRequestSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-app-text-secondary hover:text-app-text text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <select
+              value={requestStatusFilter}
+              onChange={(e) => setRequestStatusFilter(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg border border-app-border bg-app-surface text-xs font-semibold text-app-text focus:outline-none focus:border-brand"
+              aria-label="Filter requests by status"
+            >
+              <option value="ALL">All Statuses ({requests.length})</option>
+              <option value="MATCHING_RESPONDERS">Matching Responders ({requests.filter(r => r.status === 'MATCHING_RESPONDERS').length})</option>
+              <option value="RESPONDER_FOUND">Responder Found ({requests.filter(r => r.status === 'RESPONDER_FOUND').length})</option>
+              <option value="FULFILLED">Fulfilled ({requests.filter(r => r.status === 'FULFILLED').length})</option>
+              <option value="CANCELLED">Cancelled ({requests.filter(r => r.status === 'CANCELLED').length})</option>
+              <option value="EXPIRED">Expired ({requests.filter(r => r.status === 'EXPIRED').length})</option>
+            </select>
           </div>
 
           <div className="space-y-3">
-            {requests.map((r) => (
-              <div
-                key={r.id}
-                className="p-4 rounded-xl border border-app-border bg-app-muted/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-app-text bg-app-muted px-2 py-0.5 rounded border border-app-border">
-                      {r.referenceCode}
-                    </span>
-                    <span className="font-bold text-brand font-display">{r.bloodGroup} {r.component}</span>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                        r.urgency === 'Critical'
-                          ? 'bg-emergency-light text-emergency border border-emergency-border'
-                          : 'bg-brand-light text-brand'
-                      }`}
-                    >
-                      {r.urgency}
-                    </span>
-                  </div>
-                  <p className="text-app-text-secondary">
-                    Hospital: {r.hospitalName} ({r.city}) • Units: {r.unitsRequired}
-                  </p>
-                </div>
-                <span className="font-mono font-semibold uppercase text-app-text">{r.status}</span>
+            {filteredRequests.length === 0 ? (
+              <div className="p-8 text-center text-xs text-app-text-secondary rounded-xl border border-dashed border-app-border">
+                No emergency requests match the current search and filter criteria.
               </div>
-            ))}
+            ) : (
+              filteredRequests.map((r) => (
+                <div
+                  key={r.id}
+                  className="p-4 rounded-xl border border-app-border bg-app-muted/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-app-text bg-app-muted px-2 py-0.5 rounded border border-app-border">
+                        {r.referenceCode}
+                      </span>
+                      <span className="font-bold text-brand font-display">{r.bloodGroup} {r.component}</span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                          r.urgency === 'Critical'
+                            ? 'bg-emergency-light text-emergency border border-emergency-border'
+                            : 'bg-brand-light text-brand'
+                        }`}
+                      >
+                        {r.urgency}
+                      </span>
+                    </div>
+                    <p className="text-app-text-secondary">
+                      Hospital: {r.hospitalName} ({r.city}) • Units: {r.unitsRequired}
+                    </p>
+                  </div>
+                  <span className="font-mono font-semibold uppercase text-app-text">{r.status}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -953,24 +1038,112 @@ export const AdminView: React.FC = () => {
 
       {/* SECTION 7: BLOOD INVENTORY */}
       {activeSection === 'inventory' && (
-        <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle p-5 sm:p-6 space-y-4">
-          <div className="border-b border-app-border pb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
-              Network Aggregated Blood Inventory
-            </h3>
-            <p className="text-[11px] text-app-text-secondary">
-              Cross-facility stock monitoring across all certified hospital blood banks and depositories.
-            </p>
+        <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle p-5 sm:p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-app-border pb-3 gap-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
+                Network Aggregated Blood Inventory
+              </h3>
+              <p className="text-[11px] text-app-text-secondary">
+                Cross-facility stock monitoring across all certified hospital blood banks and depositories.
+              </p>
+            </div>
+            <span className="text-xs font-mono bg-app-muted px-2.5 py-1 rounded border border-app-border">
+              {inventory.reduce((sum, item) => sum + (item.units || 0), 0)} Total Units in Cold Chain
+            </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {(['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'] as BloodGroup[]).map((bg) => (
-              <div key={bg} className="p-4 rounded-xl border border-app-border bg-app-muted/30 space-y-1">
-                <span className="text-xl font-black text-brand font-display">{bg}</span>
-                <p className="text-xs text-app-text font-bold">Optimal Stock Levels</p>
-                <p className="text-[11px] text-app-text-secondary">Stored in cold-chain refrigerators</p>
+          {/* Aggregated Group Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            {inventoryByGroup.map(({ bg, totalUnits, isCritical }) => (
+              <div
+                key={bg}
+                className={`p-3.5 rounded-xl border transition-all space-y-1.5 ${
+                  isCritical
+                    ? 'bg-emergency-light/40 border-emergency-border text-emergency'
+                    : 'bg-app-muted/30 border-app-border text-app-text'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xl font-black font-display text-brand">{bg}</span>
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                      isCritical
+                        ? 'bg-emergency-light text-emergency border border-emergency-border'
+                        : 'bg-success-light text-success border border-success-border'
+                    }`}
+                  >
+                    {isCritical ? 'Low Stock' : 'Adequate'}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-lg font-extrabold font-mono">{totalUnits}</span>
+                  <span className="text-[11px] text-app-text-secondary font-medium">units</span>
+                </div>
+                <p className="text-[10px] text-app-text-secondary">
+                  {isCritical ? 'Below 5 unit safety threshold' : 'Cold-chain reserve certified'}
+                </p>
               </div>
             ))}
+          </div>
+
+          {/* Facility Breakdown Table */}
+          <div className="space-y-2.5">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
+              Facility-Level Component Breakdown
+            </h4>
+            <div className="overflow-x-auto rounded-xl border border-app-border">
+              <table className="w-full text-left text-xs text-app-text">
+                <thead className="bg-app-muted/70 text-app-text-secondary uppercase tracking-wider font-semibold text-[11px] border-b border-app-border">
+                  <tr>
+                    <th className="py-2.5 px-3.5">Depository Facility</th>
+                    <th className="py-2.5 px-3.5">Blood Group</th>
+                    <th className="py-2.5 px-3.5">Component</th>
+                    <th className="py-2.5 px-3.5">Available Units</th>
+                    <th className="py-2.5 px-3.5">Safety Status</th>
+                    <th className="py-2.5 px-3.5 text-right">Last Verified</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border">
+                  {inventory.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-app-text-secondary">
+                        No inventory stock records currently synchronized.
+                      </td>
+                    </tr>
+                  ) : (
+                    inventory.map((inv) => {
+                      const facility = bloodCentres.find((c) => c.id === inv.bloodCentreId);
+                      const isLow = inv.units <= (settings.criticalStockThreshold || 5);
+                      return (
+                        <tr key={inv.id} className="hover:bg-app-muted/30 transition-colors">
+                          <td className="py-2.5 px-3.5 font-semibold text-app-text">
+                            {facility ? facility.name : 'Central Depository'}
+                          </td>
+                          <td className="py-2.5 px-3.5 font-bold text-brand font-display">{inv.bloodGroup}</td>
+                          <td className="py-2.5 px-3.5 font-medium">{inv.component}</td>
+                          <td className="py-2.5 px-3.5 font-mono font-bold">{inv.units} units</td>
+                          <td className="py-2.5 px-3.5">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                isLow
+                                  ? 'bg-emergency-light text-emergency border border-emergency-border'
+                                  : 'bg-success-light text-success border border-success-border'
+                              }`}
+                            >
+                              {isLow ? 'Critical (<5 units)' : 'Adequate'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3.5 text-right font-mono text-[11px] text-app-text-secondary">
+                            {new Date(inv.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -978,17 +1151,116 @@ export const AdminView: React.FC = () => {
       {/* SECTION 8: ASSIGNMENTS & COORDINATION */}
       {activeSection === 'assignments' && (
         <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle p-5 sm:p-6 space-y-4">
-          <div className="border-b border-app-border pb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
-              Coordinator Assignments & Dispatch Tracking
-            </h3>
-            <p className="text-[11px] text-app-text-secondary">
-              Review active donor-patient pairings and hospital transit confirmations.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-app-border pb-3 gap-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
+                Coordinator Assignments & Dispatch Tracking
+              </h3>
+              <p className="text-[11px] text-app-text-secondary">
+                Review active donor-patient pairings and hospital transit confirmations.
+              </p>
+            </div>
+            <span className="text-xs font-mono bg-app-muted px-2.5 py-1 rounded border border-app-border">
+              {donorAssignments.length} Assignments • {donorResponses.filter(dr => dr.responseStatus === 'ACCEPTED').length} Accepted Responses
+            </span>
           </div>
-          <div className="p-8 text-center text-xs text-app-text-secondary">
-            All current emergency requests are being handled through automated multi-channel matching.
-          </div>
+
+          {donorAssignments.length > 0 ? (
+            <div className="overflow-x-auto rounded-xl border border-app-border">
+              <table className="w-full text-left text-xs text-app-text">
+                <thead className="bg-app-muted/70 text-app-text-secondary uppercase tracking-wider font-semibold text-[11px] border-b border-app-border">
+                  <tr>
+                    <th className="py-2.5 px-3.5">Assignment ID</th>
+                    <th className="py-2.5 px-3.5">Emergency Request</th>
+                    <th className="py-2.5 px-3.5">Assigned Donor</th>
+                    <th className="py-2.5 px-3.5">Units</th>
+                    <th className="py-2.5 px-3.5">Dispatch Status</th>
+                    <th className="py-2.5 px-3.5 text-right">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border">
+                  {donorAssignments.map((a) => {
+                    const req = requests.find((r) => r.id === a.requestId);
+                    const donor = donors.find((d) => d.id === a.donorId);
+                    return (
+                      <tr key={a.id} className="hover:bg-app-muted/30 transition-colors">
+                        <td className="py-2.5 px-3.5 font-mono text-[11px] text-app-text-secondary">
+                          {a.id.slice(0, 8)}...
+                        </td>
+                        <td className="py-2.5 px-3.5 font-semibold text-app-text">
+                          {req ? `${req.referenceCode} (${req.bloodGroup} ${req.component})` : a.requestId.slice(0, 8)}
+                        </td>
+                        <td className="py-2.5 px-3.5 font-bold text-app-text">
+                          {donor ? donor.fullName : a.donorId.slice(0, 8)}
+                        </td>
+                        <td className="py-2.5 px-3.5 font-mono">{a.unitsAssigned || 1} unit</td>
+                        <td className="py-2.5 px-3.5">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand-light text-brand border border-brand/20 uppercase">
+                            {a.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3.5 text-right font-mono text-[11px] text-app-text-secondary">
+                          {new Date(a.assignedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : donorResponses.filter((dr) => dr.responseStatus === 'ACCEPTED').length > 0 ? (
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
+                Active Donor Acceptances (Awaiting Transit Dispatch)
+              </h4>
+              <div className="overflow-x-auto rounded-xl border border-app-border">
+                <table className="w-full text-left text-xs text-app-text">
+                  <thead className="bg-app-muted/70 text-app-text-secondary uppercase tracking-wider font-semibold text-[11px] border-b border-app-border">
+                    <tr>
+                      <th className="py-2.5 px-3.5">Response ID</th>
+                      <th className="py-2.5 px-3.5">Emergency Request</th>
+                      <th className="py-2.5 px-3.5">Responding Donor</th>
+                      <th className="py-2.5 px-3.5">Response Status</th>
+                      <th className="py-2.5 px-3.5 text-right">Accepted At</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-app-border">
+                    {donorResponses
+                      .filter((dr) => dr.responseStatus === 'ACCEPTED')
+                      .map((dr) => {
+                        const req = requests.find((r) => r.id === dr.requestId);
+                        const donor = donors.find((d) => d.id === dr.donorId);
+                        return (
+                          <tr key={dr.id} className="hover:bg-app-muted/30 transition-colors">
+                            <td className="py-2.5 px-3.5 font-mono text-[11px] text-app-text-secondary">
+                              {dr.id.slice(0, 8)}...
+                            </td>
+                            <td className="py-2.5 px-3.5 font-semibold text-app-text">
+                              {req ? `${req.referenceCode} (${req.bloodGroup} ${req.component} @ ${req.hospitalName})` : dr.requestId.slice(0, 8)}
+                            </td>
+                            <td className="py-2.5 px-3.5 font-bold text-app-text">
+                              {donor ? donor.fullName : dr.donorId.slice(0, 8)}
+                            </td>
+                            <td className="py-2.5 px-3.5">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-success-light text-success border border-success-border uppercase">
+                                ACCEPTED
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3.5 text-right font-mono text-[11px] text-app-text-secondary">
+                              {new Date(dr.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="p-8 text-center text-xs text-app-text-secondary rounded-xl border border-dashed border-app-border">
+              All current emergency requests are being handled through automated multi-channel matching.
+            </div>
+          )}
         </div>
       )}
 
@@ -1083,7 +1355,7 @@ export const AdminView: React.FC = () => {
       {/* SECTION 11: AUDIT LOGS */}
       {activeSection === 'audit' && (
         <div className="bg-app-surface rounded-xl border border-app-border shadow-subtle p-5 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-app-border pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-app-border pb-3 gap-3">
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-app-text font-display">
                 Recorded System Audit Trail
@@ -1093,30 +1365,72 @@ export const AdminView: React.FC = () => {
               </p>
             </div>
             <span className="text-xs text-app-text-secondary font-mono bg-app-muted px-2 py-0.5 rounded border border-app-border">
-              {events.length} System Records
+              {filteredEvents.length} of {events.length} Records
             </span>
           </div>
 
+          {/* Audit Filters */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 text-app-text-secondary absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search audit trail by description, event, role..."
+                value={auditSearchTerm}
+                onChange={(e) => setAuditSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-app-border bg-app-surface text-xs text-app-text focus:outline-none focus:border-brand"
+              />
+              {auditSearchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setAuditSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-app-text-secondary hover:text-app-text text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <select
+              value={auditTypeFilter}
+              onChange={(e) => setAuditTypeFilter(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg border border-app-border bg-app-surface text-xs font-semibold text-app-text focus:outline-none focus:border-brand"
+              aria-label="Filter audit logs by event type"
+            >
+              <option value="ALL">All Event Types</option>
+              {Array.from(new Set(events.map((e) => e.eventType))).map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-            {events.map((evt) => (
-              <div
-                key={evt.id}
-                className="p-3.5 rounded-lg border border-app-border bg-app-muted/20 text-xs flex items-start justify-between gap-3 hover:bg-app-muted/40 transition-colors"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] font-bold text-brand bg-brand-light px-2 py-0.5 rounded border border-brand/20">
-                      {evt.eventType}
-                    </span>
-                    <span className="font-semibold text-app-text">{evt.actorRole}</span>
-                  </div>
-                  <p className="text-app-text-secondary leading-relaxed">{evt.description}</p>
-                </div>
-                <span className="text-[10px] font-mono text-app-text-secondary whitespace-nowrap shrink-0">
-                  {new Date(evt.timestamp).toLocaleTimeString()}
-                </span>
+            {filteredEvents.length === 0 ? (
+              <div className="p-8 text-center text-xs text-app-text-secondary rounded-xl border border-dashed border-app-border">
+                No audit log entries match the search and filter criteria.
               </div>
-            ))}
+            ) : (
+              filteredEvents.map((evt) => (
+                <div
+                  key={evt.id}
+                  className="p-3.5 rounded-lg border border-app-border bg-app-muted/20 text-xs flex items-start justify-between gap-3 hover:bg-app-muted/40 transition-colors"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] font-bold text-brand bg-brand-light px-2 py-0.5 rounded border border-brand/20">
+                        {evt.eventType}
+                      </span>
+                      <span className="font-semibold text-app-text">{evt.actorRole}</span>
+                    </div>
+                    <p className="text-app-text-secondary leading-relaxed">{evt.description}</p>
+                  </div>
+                  <span className="text-[10px] font-mono text-app-text-secondary whitespace-nowrap shrink-0">
+                    {new Date(evt.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

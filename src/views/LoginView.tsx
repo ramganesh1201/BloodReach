@@ -16,7 +16,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ initialMode }) => {
   const resolvedMode = initialMode || (isRegisterPath ? 'signup' : 'signin');
 
   return (
-    <div className="min-h-[85vh] flex flex-col justify-center py-10 sm:py-16 px-4 sm:px-6 lg:px-8 bg-app-bg animate-fade-in">
+    <div className="min-h-[85vh] flex flex-col justify-center py-6 sm:py-12 px-4 sm:px-6 lg:px-8 bg-app-bg animate-fade-in">
       <div className="sm:mx-auto sm:w-full sm:max-w-md mb-6">
         {/* Top Back Link */}
         <Link

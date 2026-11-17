@@ -27,12 +27,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-app-text/60 backdrop-blur-sm animate-fade-in overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-app-text/60 backdrop-blur-sm animate-fade-in overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-label="CareLoop Access Portal"
     >
-      <div className="w-full max-w-md my-8">
+      <div className="w-full max-w-md my-auto sm:my-8 py-2">
         <AuthCard
           initialMode={initialMode}
           onSuccess={handleSuccess}

@@ -177,7 +177,7 @@ export const AuthCard: React.FC<AuthCardProps> = ({
   return (
     <div className="bg-app-surface rounded-2xl border border-app-border shadow-elevated overflow-hidden max-w-md w-full mx-auto transition-all">
       {/* Brand Header */}
-      <div className="bg-app-text text-white p-6 relative flex items-center justify-between border-b border-app-border">
+      <div className="bg-app-text text-white p-4 sm:p-5 relative flex items-center justify-between border-b border-app-border">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-brand text-white flex items-center justify-center font-bold shadow-sm">
             <Shield className="w-5 h-5" />
@@ -205,7 +205,7 @@ export const AuthCard: React.FC<AuthCardProps> = ({
         <button
           type="button"
           onClick={() => handleModeChange('signin')}
-          className={`py-3 text-center transition-colors border-b-2 ${
+          className={`py-2.5 sm:py-3 text-center transition-colors border-b-2 ${
             mode === 'signin' || mode === 'forgot'
               ? 'bg-app-surface text-app-text border-brand'
               : 'text-app-text-secondary hover:text-app-text border-transparent'
@@ -216,7 +216,7 @@ export const AuthCard: React.FC<AuthCardProps> = ({
         <button
           type="button"
           onClick={() => handleModeChange('signup')}
-          className={`py-3 text-center transition-colors border-b-2 ${
+          className={`py-2.5 sm:py-3 text-center transition-colors border-b-2 ${
             mode === 'signup'
               ? 'bg-app-surface text-app-text border-brand'
               : 'text-app-text-secondary hover:text-app-text border-transparent'
@@ -226,10 +226,10 @@ export const AuthCard: React.FC<AuthCardProps> = ({
         </button>
       </div>
 
-      <div className="p-6 space-y-4">
+      <div className="p-4 sm:p-5 space-y-3.5 max-h-[80dvh] overflow-y-auto">
         {/* Error Alert Box */}
         {(errorMessage || authError) && (
-          <div className="p-3.5 rounded-xl bg-emergency-light border border-emergency-border text-xs text-emergency flex items-start gap-2.5 animate-fade-in">
+          <div className="p-3 rounded-xl bg-emergency-light border border-emergency-border text-xs text-emergency flex items-start gap-2.5 animate-fade-in">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span className="leading-relaxed">{errorMessage || authError}</span>
           </div>
@@ -237,7 +237,7 @@ export const AuthCard: React.FC<AuthCardProps> = ({
 
         {/* General Success Alert Box */}
         {successMessage && (
-          <div className="p-3.5 rounded-xl bg-success-light border border-success-border text-xs text-success-dark flex items-start gap-2.5 animate-fade-in">
+          <div className="p-3 rounded-xl bg-success-light border border-success-border text-xs text-success-dark flex items-start gap-2.5 animate-fade-in">
             <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-success" />
             <span className="leading-relaxed">{successMessage}</span>
           </div>
@@ -245,15 +245,15 @@ export const AuthCard: React.FC<AuthCardProps> = ({
 
         {/* 1. SIGN IN FORM */}
         {mode === 'signin' && (
-          <form onSubmit={handleSignIn} className="space-y-4">
-            <div className="space-y-1">
+          <form onSubmit={handleSignIn} className="space-y-3.5">
+            <div className="space-y-0.5">
               <h3 className="text-sm font-bold text-app-text">Welcome back</h3>
               <p className="text-xs text-app-text-secondary">Enter your email and password to access your workspace.</p>
             </div>
 
-            <div className="space-y-3.5 pt-1">
+            <div className="space-y-3 pt-1">
               <div>
-                <label className="text-xs font-semibold text-app-text block mb-1.5">
+                <label className="text-xs font-semibold text-app-text block mb-1">
                   Email Address
                 </label>
                 <div className="relative">
@@ -265,14 +265,14 @@ export const AuthCard: React.FC<AuthCardProps> = ({
                     autoComplete="email"
                     required
                     disabled={isAuthLoading}
-                    className="w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
+                    className="w-full h-10 pl-9 pr-3.5 py-2 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
                   />
-                  <Mail className="w-4 h-4 text-app-text-secondary absolute left-3 top-3" />
+                  <Mail className="w-4 h-4 text-app-text-secondary absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-semibold text-app-text">Password</label>
                   <button
                     type="button"
@@ -291,13 +291,13 @@ export const AuthCard: React.FC<AuthCardProps> = ({
                     autoComplete="current-password"
                     required
                     disabled={isAuthLoading}
-                    className="w-full pl-9 pr-10 py-2.5 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
+                    className="w-full h-10 pl-9 pr-10 py-2 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
                   />
-                  <Lock className="w-4 h-4 text-app-text-secondary absolute left-3 top-3" />
+                  <Lock className="w-4 h-4 text-app-text-secondary absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <button
                     type="button"
                     onClick={() => setShowSignInPassword(!showSignInPassword)}
-                    className="absolute right-3 top-2.5 text-app-text-secondary hover:text-app-text p-0.5 rounded focus:outline-none"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-app-text-secondary hover:text-app-text p-1 rounded focus:outline-none flex items-center justify-center"
                     aria-label={showSignInPassword ? 'Hide password' : 'Show password'}
                   >
                     {showSignInPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -309,7 +309,7 @@ export const AuthCard: React.FC<AuthCardProps> = ({
             <button
               type="submit"
               disabled={isAuthLoading}
-              className="w-full mt-2 py-3 px-4 rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-xs sm:text-sm transition-colors shadow-xs flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+              className="w-full mt-2 h-10 sm:h-11 py-2 px-4 rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-xs sm:text-sm transition-colors shadow-xs flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
             >
               {isAuthLoading ? (
                 <>
@@ -324,7 +324,7 @@ export const AuthCard: React.FC<AuthCardProps> = ({
               )}
             </button>
 
-            <div className="relative my-3">
+            <div className="relative my-2.5">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-app-border" />
               </div>
@@ -339,7 +339,7 @@ export const AuthCard: React.FC<AuthCardProps> = ({
               type="button"
               onClick={handleGoogleSignIn}
               disabled={isAuthLoading}
-              className="w-full py-2.5 px-4 rounded-xl border border-app-border bg-app-surface hover:bg-app-muted text-app-text font-semibold text-xs transition-colors shadow-xs flex items-center justify-center gap-2.5 disabled:opacity-60 cursor-pointer"
+              className="w-full h-10 py-2 px-4 rounded-xl border border-app-border bg-app-surface hover:bg-app-muted text-app-text font-semibold text-xs transition-colors shadow-xs flex items-center justify-center gap-2.5 disabled:opacity-60 cursor-pointer"
             >
               <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -367,19 +367,19 @@ export const AuthCard: React.FC<AuthCardProps> = ({
 
         {/* 2. REGISTRATION FORM */}
         {mode === 'signup' && (
-          <form onSubmit={handleSignUp} className="space-y-4">
-            <div className="space-y-1">
+          <form onSubmit={handleSignUp} className="space-y-3">
+            <div className="space-y-0.5">
               <h3 className="text-sm font-bold text-app-text">Register for CareLoop</h3>
               <p className="text-xs text-app-text-secondary">Create a personal patient or attendant account.</p>
             </div>
 
             {/* Role Notice */}
-            <div className="p-3 rounded-xl bg-app-muted/70 border border-app-border text-[11px] text-app-text-secondary leading-relaxed">
+            <div className="p-2.5 rounded-xl bg-app-muted/70 border border-app-border text-[10px] sm:text-[11px] text-app-text-secondary leading-relaxed">
               <strong className="text-app-text block mb-0.5">Account Provisioning Notice:</strong>
               Public accounts are registered with standard Patient & Attendant access. Clinical staff, emergency coordinators, and transfusion facility roles are provisioned internally by system administrators.
             </div>
 
-            <div className="space-y-3 pt-1">
+            <div className="space-y-2.5 pt-0.5">
               <div>
                 <label className="text-xs font-semibold text-app-text block mb-1">Full Legal Name</label>
                 <div className="relative">
@@ -391,9 +391,9 @@ export const AuthCard: React.FC<AuthCardProps> = ({
                     autoComplete="name"
                     required
                     disabled={isAuthLoading}
-                    className="w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
+                    className="w-full h-10 pl-9 pr-3.5 py-2 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
                   />
-                  <User className="w-4 h-4 text-app-text-secondary absolute left-3 top-3" />
+                  <User className="w-4 h-4 text-app-text-secondary absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
 
@@ -408,9 +408,9 @@ export const AuthCard: React.FC<AuthCardProps> = ({
                     autoComplete="email"
                     required
                     disabled={isAuthLoading}
-                    className="w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
+                    className="w-full h-10 pl-9 pr-3.5 py-2 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
                   />
-                  <Mail className="w-4 h-4 text-app-text-secondary absolute left-3 top-3" />
+                  <Mail className="w-4 h-4 text-app-text-secondary absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
 
@@ -425,61 +425,63 @@ export const AuthCard: React.FC<AuthCardProps> = ({
                     autoComplete="tel"
                     required
                     disabled={isAuthLoading}
-                    className="w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
+                    className="w-full h-10 pl-9 pr-3.5 py-2 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
                   />
-                  <Phone className="w-4 h-4 text-app-text-secondary absolute left-3 top-3" />
+                  <Phone className="w-4 h-4 text-app-text-secondary absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-app-text block mb-1">Password (min 6 characters)</label>
-                <div className="relative">
-                  <input
-                    type={showRegPassword ? 'text' : 'password'}
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="Create password"
-                    autoComplete="new-password"
-                    required
-                    minLength={6}
-                    disabled={isAuthLoading}
-                    className="w-full pl-9 pr-10 py-2.5 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
-                  />
-                  <Lock className="w-4 h-4 text-app-text-secondary absolute left-3 top-3" />
-                  <button
-                    type="button"
-                    onClick={() => setShowRegPassword(!showRegPassword)}
-                    className="absolute right-3 top-2.5 text-app-text-secondary hover:text-app-text p-0.5 rounded focus:outline-none"
-                    aria-label={showRegPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-xs font-semibold text-app-text block mb-1">Password (min 6)</label>
+                  <div className="relative">
+                    <input
+                      type={showRegPassword ? 'text' : 'password'}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Password"
+                      autoComplete="new-password"
+                      required
+                      minLength={6}
+                      disabled={isAuthLoading}
+                      className="w-full h-10 pl-9 pr-9 py-2 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
+                    />
+                    <Lock className="w-4 h-4 text-app-text-secondary absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(!showRegPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-app-text-secondary hover:text-app-text p-1 rounded focus:outline-none flex items-center justify-center"
+                      aria-label={showRegPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="text-xs font-semibold text-app-text block mb-1">Confirm Password</label>
-                <div className="relative">
-                  <input
-                    type={showRegConfirmPassword ? 'text' : 'password'}
-                    value={regConfirmPassword}
-                    onChange={(e) => setRegConfirmPassword(e.target.value)}
-                    placeholder="Re-enter password"
-                    autoComplete="new-password"
-                    required
-                    minLength={6}
-                    disabled={isAuthLoading}
-                    className="w-full pl-9 pr-10 py-2.5 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
-                  />
-                  <Lock className="w-4 h-4 text-app-text-secondary absolute left-3 top-3" />
-                  <button
-                    type="button"
-                    onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)}
-                    className="absolute right-3 top-2.5 text-app-text-secondary hover:text-app-text p-0.5 rounded focus:outline-none"
-                    aria-label={showRegConfirmPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showRegConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                <div>
+                  <label className="text-xs font-semibold text-app-text block mb-1">Confirm Password</label>
+                  <div className="relative">
+                    <input
+                      type={showRegConfirmPassword ? 'text' : 'password'}
+                      value={regConfirmPassword}
+                      onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      placeholder="Confirm"
+                      autoComplete="new-password"
+                      required
+                      minLength={6}
+                      disabled={isAuthLoading}
+                      className="w-full h-10 pl-9 pr-9 py-2 text-xs sm:text-sm border border-app-border rounded-xl bg-app-surface text-app-text focus:border-brand focus:ring-1 focus:ring-brand transition-all disabled:opacity-50"
+                    />
+                    <Lock className="w-4 h-4 text-app-text-secondary absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-app-text-secondary hover:text-app-text p-1 rounded focus:outline-none flex items-center justify-center"
+                      aria-label={showRegConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showRegConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -487,7 +489,7 @@ export const AuthCard: React.FC<AuthCardProps> = ({
             <button
               type="submit"
               disabled={isAuthLoading}
-              className="w-full mt-2 py-3 px-4 rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-xs sm:text-sm transition-colors shadow-xs flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+              className="w-full mt-2 h-10 sm:h-11 py-2 px-4 rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-xs sm:text-sm transition-colors shadow-xs flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
             >
               {isAuthLoading ? (
                 <>
@@ -502,7 +504,7 @@ export const AuthCard: React.FC<AuthCardProps> = ({
               )}
             </button>
 
-            <div className="relative my-3">
+            <div className="relative my-2.5">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-app-border" />
               </div>
@@ -517,7 +519,7 @@ export const AuthCard: React.FC<AuthCardProps> = ({
               type="button"
               onClick={handleGoogleSignIn}
               disabled={isAuthLoading}
-              className="w-full py-2.5 px-4 rounded-xl border border-app-border bg-app-surface hover:bg-app-muted text-app-text font-semibold text-xs transition-colors shadow-xs flex items-center justify-center gap-2.5 disabled:opacity-60 cursor-pointer"
+              className="w-full h-10 py-2 px-4 rounded-xl border border-app-border bg-app-surface hover:bg-app-muted text-app-text font-semibold text-xs transition-colors shadow-xs flex items-center justify-center gap-2.5 disabled:opacity-60 cursor-pointer"
             >
               <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />

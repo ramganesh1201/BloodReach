@@ -133,6 +133,7 @@ export const DonorView: React.FC = () => {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewSuccessMsg, setReviewSuccessMsg] = useState<string | null>(null);
   const [reviewErrorMsg, setReviewErrorMsg] = useState<string | null>(null);
+  const [declineFeedback, setDeclineFeedback] = useState<string | null>(null);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const [pushState, setPushState] = useState(fcmService.getState());
   useEffect(() => {
@@ -296,6 +297,16 @@ export const DonorView: React.FC = () => {
             }));
           }
         }
+      } else if (status === 'DECLINED') {
+        if (res.success) {
+          setDeclineFeedback('Emergency request declined. It has been removed from your active requests.');
+          setTimeout(() => setDeclineFeedback(null), 5000);
+        } else {
+          setCardErrors((prev) => ({
+            ...prev,
+            [requestId]: res.error || 'Failed to record decline on server. Please try again.',
+          }));
+        }
       }
     } catch (err: any) {
       setCardErrors((prev) => ({
@@ -439,7 +450,15 @@ export const DonorView: React.FC = () => {
     if (currentUser?.id && r.createdBy === currentUser.id) return false;
     if (activeDonor?.profileId && r.createdBy === activeDonor.profileId) return false;
 
-    // 3. Clinical compatibility (ABO / Rh / Component)
+    // 3. Exclude requests this donor has already declined
+    const donorResp = donorResponses.find(
+      (dr) => dr.requestId === r.id && dr.donorId === activeDonor.id
+    );
+    if (donorResp?.responseStatus === 'DECLINED') {
+      return false;
+    }
+
+    // 4. Clinical compatibility (ABO / Rh / Component)
     const comp = isClinicallyCompatible(r.bloodGroup, activeDonor.bloodGroup, r.component);
     if (!comp.compatible) return false;
 
@@ -859,6 +878,24 @@ export const DonorView: React.FC = () => {
             </div>
           </div>
 
+          {/* Decline Confirmation Notice */}
+          {declineFeedback && (
+            <div className="p-3 bg-app-surface border border-app-border rounded-xl text-xs text-app-text flex items-center justify-between shadow-subtle animate-fade-in">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-brand shrink-0" />
+                <span>{declineFeedback}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeclineFeedback(null)}
+                className="text-app-text-secondary hover:text-app-text p-1"
+                aria-label="Dismiss message"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Urgent Needs Near You Preview */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -909,6 +946,24 @@ export const DonorView: React.FC = () => {
       {/* TAB 2: MATCHING REQUESTS */}
       {activeTab === 'matches' && (
         <div className="space-y-4 animate-fade-in">
+          {/* Decline Confirmation Notice */}
+          {declineFeedback && (
+            <div className="p-3 bg-app-surface border border-app-border rounded-xl text-xs text-app-text flex items-center justify-between shadow-subtle animate-fade-in">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-brand shrink-0" />
+                <span>{declineFeedback}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeclineFeedback(null)}
+                className="text-app-text-secondary hover:text-app-text p-1"
+                aria-label="Dismiss message"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {!activeDonor.isAvailable ? (
             <EmptyState
               icon={AlertCircle}

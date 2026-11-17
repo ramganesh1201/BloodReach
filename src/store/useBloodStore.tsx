@@ -1160,6 +1160,17 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const userDonor = donorRes.data;
         setDonors((prev) => [userDonor, ...prev.filter((d) => d.profileId !== currentUser.id)]);
         localStorage.setItem(`careloop_donor_profile_${currentUser.id}`, JSON.stringify(userDonor));
+
+        // Synchronize authoritative donor responses from database (ensuring declines persist)
+        try {
+          const respRes = await donorResponseService.getDonorResponses(userDonor.id);
+          if (respRes.success && respRes.data) {
+            setDonorResponses(respRes.data);
+            localStorage.setItem('careloop_donor_responses', JSON.stringify(respRes.data));
+          }
+        } catch {
+          // Non-blocking response hydration
+        }
       }
     } catch (err: any) {
       console.warn('[CareLoop Store] Failed to refresh donor profile from DB:', err?.message);
@@ -1195,6 +1206,13 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'donors' },
+        () => {
+          refreshDonorProfile();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'donor_responses' },
         () => {
           refreshDonorProfile();
         }
@@ -2417,7 +2435,16 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (existingRespIndex >= 0) {
       setDonorResponses((prev) => prev.map((r, i) => (i === existingRespIndex ? newResponse : r)));
     } else {
-      setDonorResponses((prev) => [newResponse, ...prev]);
+      setDonorResponses((prev) => {
+      const updated = [
+        newResponse,
+        ...prev.filter((dr) => !(dr.requestId === requestId && dr.donorId === donorId)),
+      ];
+      try {
+        localStorage.setItem('careloop_donor_responses', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     }
 
     setRequests((prev) =>
@@ -2553,7 +2580,16 @@ export const BloodStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       timestamp: new Date().toISOString(),
     };
 
-    setDonorResponses((prev) => [newResponse, ...prev]);
+    setDonorResponses((prev) => {
+      const updated = [
+        newResponse,
+        ...prev.filter((dr) => !(dr.requestId === requestId && dr.donorId === donorId)),
+      ];
+      try {
+        localStorage.setItem('careloop_donor_responses', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
 
     addEvent(
       requestId,
