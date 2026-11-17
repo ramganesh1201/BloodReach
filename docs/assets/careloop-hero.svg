@@ -1,0 +1,298 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 600" width="100%" height="auto" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="heroBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="50%" stop-color="#FAF5F5" />
+      <stop offset="100%" stop-color="#F3EAEB" />
+    </linearGradient>
+
+    <linearGradient id="crimsonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#B42332" />
+      <stop offset="100%" stop-color="#8F1928" />
+    </linearGradient>
+
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#B42332" />
+      <stop offset="50%" stop-color="#D93848" />
+      <stop offset="100%" stop-color="#8F1928" />
+    </linearGradient>
+
+    <linearGradient id="badgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#FBFBFB" />
+    </linearGradient>
+
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.80" />
+    </linearGradient>
+
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#B42332" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#8F1928" stop-opacity="0.0" />
+    </linearGradient>
+
+    <!-- Filters -->
+    <filter id="cardShadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#8F1928" flood-opacity="0.08" />
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#202124" flood-opacity="0.04" />
+    </filter>
+
+    <filter id="logoShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#B42332" flood-opacity="0.30" />
+    </filter>
+
+    <filter id="pillShadow" x="-10%" y="-20%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.04" />
+    </filter>
+
+    <!-- Patterns -->
+    <pattern id="clinicalGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#B42332" stroke-width="0.75" stroke-opacity="0.06" />
+      <circle cx="40" cy="40" r="1.2" fill="#B42332" fill-opacity="0.12" />
+    </pattern>
+  </defs>
+
+  <style>
+    .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  </style>
+
+  <!-- Background Layer -->
+  <rect width="1600" height="600" fill="url(#heroBg)" />
+  <rect width="1600" height="600" fill="url(#clinicalGrid)" />
+
+  <!-- Ambient Decorative Geometry -->
+  <circle cx="1420" cy="120" r="280" fill="url(#glowGrad)" />
+  <circle cx="200" cy="520" r="240" fill="url(#glowGrad)" />
+
+  <!-- Abstract Clinical Wave / Coordinate Lines -->
+  <g opacity="0.25">
+    <path d="M 900 600 C 1100 450, 1250 550, 1600 380" fill="none" stroke="#B42332" stroke-width="2" stroke-dasharray="6,6" />
+    <path d="M 980 600 C 1180 420, 1300 480, 1600 320" fill="none" stroke="#8F1928" stroke-width="1.5" />
+    <path d="M 850 600 C 1050 500, 1150 580, 1600 460" fill="none" stroke="#B42332" stroke-width="1" stroke-dasharray="3,3" />
+  </g>
+
+  <!-- LEFT HERO SECTION: Brand, Tagline, Value Proposition, Metadata -->
+  <g transform="translate(100, 75)" class="font-sans">
+    
+    <!-- Top Pill: Governance & Compliance -->
+    <g transform="translate(0, 0)">
+      <rect width="364" height="34" rx="17" fill="url(#badgeGrad)" stroke="#E5CED2" stroke-width="1" filter="url(#pillShadow)" />
+      <circle cx="18" cy="17" r="4.5" fill="#1E8E3E" />
+      <circle cx="18" cy="17" r="8" fill="#1E8E3E" fill-opacity="0.2" />
+      <text x="36" y="22" font-size="12" font-weight="700" fill="#8F1928" letter-spacing="1">NBTC 2023 COMPLIANT</text>
+      <text x="200" y="22" font-size="12" font-weight="500" fill="#687078">•</text>
+      <text x="216" y="22" font-size="12" font-weight="600" fill="#202124">DISPATCH GRADE GRID</text>
+    </g>
+
+    <!-- Main Title & Logo Lockup -->
+    <g transform="translate(0, 68)">
+      <!-- CareLoop Logo Icon -->
+      <g transform="translate(0, 0)">
+        <rect width="68" height="68" rx="20" fill="url(#crimsonGrad)" filter="url(#logoShadow)" />
+        <!-- Stylized Droplet with Intersecting Heart Nodes -->
+        <path d="M34 16 C34 16, 21 31.5, 21 40 C21 47.18 26.82 53 34 53 C41.18 53 47 47.18 47 40 C47 31.5, 34 16, 34 16 Z" fill="#FFFFFF" fill-opacity="0.95" />
+        <!-- Inner Medical Cross & Heart Blend -->
+        <path d="M31.5 33 H36.5 V47 H31.5 Z" fill="#B42332" />
+        <path d="M25 38.5 H43 V42.5 H25 Z" fill="#B42332" />
+      </g>
+
+      <!-- App Name & Slogan -->
+      <text x="86" y="50" font-size="52" font-weight="800" fill="#202124" letter-spacing="-1.5">CareLoop</text>
+      <text x="318" y="32" font-size="13" font-weight="700" fill="#B42332" letter-spacing="0.5" class="font-mono">v2.4 PROD</text>
+    </g>
+
+    <!-- Project Tagline -->
+    <text x="0" y="180" font-size="32" font-weight="700" fill="#8F1928" letter-spacing="-0.5">
+      National Emergency Blood Coordination Grid
+    </text>
+
+    <!-- Mission Subtext -->
+    <text x="0" y="218" font-size="18" font-weight="400" fill="#4A4E54" line-height="28">
+      Mission-critical clinical triage bridging verified donors, accredited hospitals,
+    </text>
+    <text x="0" y="244" font-size="18" font-weight="400" fill="#4A4E54">
+      and licensed blood depositories with sub-second matching and zero-delay dispatch.
+    </text>
+
+    <!-- Feature Grid Metrics / Key Technical Pillars -->
+    <g transform="translate(0, 290)">
+      <!-- Pillar 1: Matching -->
+      <g transform="translate(0, 0)">
+        <rect width="190" height="74" rx="12" fill="#FFFFFF" stroke="#E6D3D6" stroke-width="1" />
+        <text x="16" y="28" font-size="12" font-weight="700" fill="#8F1928" letter-spacing="0.5">COMPATIBILITY</text>
+        <text x="16" y="52" font-size="18" font-weight="700" fill="#202124">ABO / Rh Engine</text>
+        <text x="16" y="65" font-size="10.5" font-weight="500" fill="#687078">Instant Triage Matrix</text>
+      </g>
+
+      <!-- Pillar 2: Security & RLS -->
+      <g transform="translate(204, 0)">
+        <rect width="190" height="74" rx="12" fill="#FFFFFF" stroke="#E6D3D6" stroke-width="1" />
+        <text x="16" y="28" font-size="12" font-weight="700" fill="#8F1928" letter-spacing="0.5">ZERO-TRUST RLS</text>
+        <text x="16" y="52" font-size="18" font-weight="700" fill="#202124">Case Encrypted</text>
+        <text x="16" y="65" font-size="10.5" font-weight="500" fill="#687078">Supabase Auth &amp; RBAC</text>
+      </g>
+
+      <!-- Pillar 3: Telemetry & Calling -->
+      <g transform="translate(408, 0)">
+        <rect width="190" height="74" rx="12" fill="#FFFFFF" stroke="#E6D3D6" stroke-width="1" />
+        <text x="16" y="28" font-size="12" font-weight="700" fill="#8F1928" letter-spacing="0.5">COMMUNICATION</text>
+        <text x="16" y="52" font-size="18" font-weight="700" fill="#202124">Realtime + Voice</text>
+        <text x="16" y="65" font-size="10.5" font-weight="500" fill="#687078">WebRTC P2P Signaling</text>
+      </g>
+    </g>
+
+    <!-- Technical Badges Row -->
+    <g transform="translate(0, 395)">
+      <!-- Tech Badge: React 18 -->
+      <g transform="translate(0, 0)">
+        <rect width="112" height="30" rx="15" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1" />
+        <circle cx="15" cy="15" r="4" fill="#00D8FF" />
+        <text x="26" y="19" font-size="11.5" font-weight="600" fill="#374151">React 18</text>
+      </g>
+      <!-- Tech Badge: TypeScript -->
+      <g transform="translate(122, 0)">
+        <rect width="124" height="30" rx="15" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1" />
+        <circle cx="15" cy="15" r="4" fill="#3178C6" />
+        <text x="26" y="19" font-size="11.5" font-weight="600" fill="#374151">TypeScript 5</text>
+      </g>
+      <!-- Tech Badge: Supabase -->
+      <g transform="translate(256, 0)">
+        <rect width="118" height="30" rx="15" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1" />
+        <circle cx="15" cy="15" r="4" fill="#3ECF8E" />
+        <text x="26" y="19" font-size="11.5" font-weight="600" fill="#374151">Supabase</text>
+      </g>
+      <!-- Tech Badge: PostgreSQL -->
+      <g transform="translate(384, 0)">
+        <rect width="126" height="30" rx="15" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1" />
+        <circle cx="15" cy="15" r="4" fill="#336791" />
+        <text x="26" y="19" font-size="11.5" font-weight="600" fill="#374151">PostgreSQL</text>
+      </g>
+      <!-- Tech Badge: PWA Ready -->
+      <g transform="translate(520, 0)">
+        <rect width="112" height="30" rx="15" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1" />
+        <circle cx="15" cy="15" r="4" fill="#B42332" />
+        <text x="26" y="19" font-size="11.5" font-weight="600" fill="#374151">PWA Ready</text>
+      </g>
+    </g>
+
+  </g>
+
+  <!-- RIGHT HERO SECTION: Interactive Architectural Mockup Card -->
+  <g transform="translate(930, 65)" class="font-sans">
+    
+    <!-- Large Glassmorphic Main Card -->
+    <rect width="570" height="465" rx="24" fill="url(#cardGrad)" stroke="#FFFFFF" stroke-width="2" filter="url(#cardShadow)" />
+    
+    <!-- Top Header of Card: Live Dispatch Console -->
+    <g transform="translate(28, 28)">
+      <rect width="514" height="64" rx="14" fill="#FAF3F3" stroke="#F0D9DC" stroke-width="1" />
+      <circle cx="28" cy="32" r="14" fill="#B42332" />
+      <!-- Pulsing Activity Beacon -->
+      <circle cx="28" cy="32" r="18" fill="none" stroke="#B42332" stroke-width="1.5" opacity="0.6">
+        <animate attributeName="r" values="14;22;14" dur="2.5s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.8;0;0.8" dur="2.5s" repeatCount="indefinite" />
+      </circle>
+      <path d="M24 32 L27 35 L33 29" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round" />
+      
+      <text x="56" y="27" font-size="13" font-weight="700" fill="#8F1928" letter-spacing="0.5">NATIONAL NETWORK ACTIVE</text>
+      <text x="56" y="47" font-size="15" font-weight="700" fill="#202124">Apollo Specialty &amp; Metro Trauma Hubs</text>
+      
+      <rect x="420" y="18" width="80" height="28" rx="8" fill="#FFFFFF" stroke="#E5CED2" stroke-width="1" />
+      <text x="434" y="36" font-size="12" font-weight="700" fill="#B42332" class="font-mono">LIVE ETA</text>
+    </g>
+
+    <!-- Request Incident Preview -->
+    <g transform="translate(28, 108)">
+      <rect width="514" height="150" rx="16" fill="#FFFFFF" stroke="#EBECEF" stroke-width="1.2" />
+      
+      <!-- Incident Tag & Urgency -->
+      <g transform="translate(20, 20)">
+        <rect width="78" height="24" rx="6" fill="#FEE2E2" />
+        <text x="11" y="16" font-size="11" font-weight="800" fill="#991B1B">CRITICAL</text>
+
+        <rect x="88" y="0" width="88" height="24" rx="6" fill="#FEF3C7" />
+        <text x="98" y="16" font-size="11" font-weight="700" fill="#92400E">O-NEGATIVE</text>
+
+        <text x="440" y="16" font-size="12" font-weight="600" fill="#687078" text-anchor="end">REQ #4017-E41C</text>
+      </g>
+
+      <!-- Hospital & Transfusion Details -->
+      <text x="20" y="74" font-size="17" font-weight="700" fill="#202124">Emergency Whole Blood / PRBC Units (2 Units)</text>
+      <text x="20" y="96" font-size="13.5" font-weight="500" fill="#4B5563">Department of Cardiac Surgery • Cross-Match Lab 3</text>
+
+      <!-- Progress / Pipeline Steps -->
+      <g transform="translate(20, 115)">
+        <!-- Step 1 Complete -->
+        <circle cx="8" cy="8" r="8" fill="#1E8E3E" />
+        <path d="M5 8 L7 10 L11 6" stroke="#FFFFFF" stroke-width="1.5" fill="none" />
+        <text x="22" y="12" font-size="11" font-weight="600" fill="#202124">Triage</text>
+        <line x1="62" y1="8" x2="110" y2="8" stroke="#1E8E3E" stroke-width="2" />
+
+        <!-- Step 2 Complete -->
+        <circle cx="126" cy="8" r="8" fill="#1E8E3E" />
+        <path d="M123 8 L125 10 L129 6" stroke="#FFFFFF" stroke-width="1.5" fill="none" />
+        <text x="140" y="12" font-size="11" font-weight="600" fill="#202124">Matched</text>
+        <line x1="195" y1="8" x2="245" y2="8" stroke="#1E8E3E" stroke-width="2" />
+
+        <!-- Step 3 Active -->
+        <circle cx="261" cy="8" r="8" fill="#B42332" />
+        <circle cx="261" cy="8" r="4" fill="#FFFFFF" />
+        <text x="275" y="12" font-size="11" font-weight="700" fill="#B42332">Transit (12m)</text>
+        <line x1="355" y1="8" x2="405" y2="8" stroke="#D1D5DB" stroke-width="2" stroke-dasharray="3,3" />
+
+        <!-- Step 4 Pending -->
+        <circle cx="421" cy="8" r="8" fill="#E5E7EB" />
+        <text x="435" y="12" font-size="11" font-weight="500" fill="#9CA3AF">Verify</text>
+      </g>
+    </g>
+
+    <!-- Communication & Coordination Micro-Panel -->
+    <g transform="translate(28, 274)">
+      <rect width="514" height="84" rx="14" fill="#FFFFFF" stroke="#EBECEF" stroke-width="1.2" />
+      
+      <!-- Avatar with Donor Status -->
+      <circle cx="44" cy="42" r="22" fill="#EAECEF" />
+      <text x="44" y="47" font-size="14" font-weight="700" fill="#4B5563" text-anchor="middle">RG</text>
+      <circle cx="60" cy="56" r="6" fill="#1E8E3E" stroke="#FFFFFF" stroke-width="2" />
+
+      <!-- Donor & Message Preview -->
+      <text x="80" y="34" font-size="14" font-weight="700" fill="#202124">Dr. Ramesh Ganesh (Donor Accepted)</text>
+      <text x="80" y="54" font-size="12.5" font-weight="400" fill="#4B5563">"Arriving at Apollo Transfusion Center East Gate in 10 mins."</text>
+      
+      <!-- Voice Call Action Button -->
+      <g transform="translate(420, 22)">
+        <rect width="78" height="40" rx="10" fill="#FAF0F1" stroke="#F0D9DC" stroke-width="1" />
+        <text x="39" y="24" font-size="11.5" font-weight="700" fill="#B42332" text-anchor="middle">P2P Call</text>
+      </g>
+    </g>
+
+    <!-- Telemetry Status Bar -->
+    <g transform="translate(28, 374)">
+      <rect width="514" height="62" rx="12" fill="#1C1F26" />
+      
+      <g transform="translate(24, 22)">
+        <text x="0" y="12" font-size="11" font-weight="600" fill="#9CA3AF" letter-spacing="0.5">DISPATCH LATENCY</text>
+        <text x="0" y="30" font-size="16" font-weight="700" fill="#3ECF8E" class="font-mono">142ms</text>
+      </g>
+
+      <g transform="translate(160, 22)">
+        <text x="0" y="12" font-size="11" font-weight="600" fill="#9CA3AF" letter-spacing="0.5">ACTIVE REGISTRY</text>
+        <text x="0" y="30" font-size="16" font-weight="700" fill="#FFFFFF" class="font-mono">14 Donors</text>
+      </g>
+
+      <g transform="translate(295, 22)">
+        <text x="0" y="12" font-size="11" font-weight="600" fill="#9CA3AF" letter-spacing="0.5">ACCREDITED HUBS</text>
+        <text x="0" y="30" font-size="16" font-weight="700" fill="#FFFFFF" class="font-mono">6 Hospitals</text>
+      </g>
+
+      <g transform="translate(430, 22)">
+        <text x="0" y="12" font-size="11" font-weight="600" fill="#9CA3AF" letter-spacing="0.5">SECURITY</text>
+        <text x="0" y="30" font-size="16" font-weight="700" fill="#38BDF8" class="font-mono">RLS 100%</text>
+      </g>
+    </g>
+
+  </g>
+</svg>

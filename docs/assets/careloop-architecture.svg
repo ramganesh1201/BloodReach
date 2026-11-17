@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="100%" height="auto" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <linearGradient id="archBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F9FAFB" />
+    </linearGradient>
+
+    <filter id="archShadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#8F1928" flood-opacity="0.05" />
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000000" flood-opacity="0.03" />
+    </filter>
+
+    <marker id="archArrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#B42332" />
+    </marker>
+    <marker id="archArrowBlue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#3B82F6" />
+    </marker>
+  </defs>
+
+  <style>
+    .arch-sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .arch-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  </style>
+
+  <!-- Background -->
+  <rect width="1200" height="680" rx="16" fill="url(#archBg)" stroke="#E5E7EB" stroke-width="1.5" />
+
+  <!-- Diagram Title Header -->
+  <g transform="translate(48, 32)" class="arch-sans">
+    <rect width="180" height="24" rx="12" fill="#FAF0F1" stroke="#F0D9DC" stroke-width="1" />
+    <text x="90" y="16" font-size="11" font-weight="700" fill="#8F1928" text-anchor="middle" letter-spacing="1">SYSTEM ARCHITECTURE</text>
+    
+    <text x="0" y="54" font-size="24" font-weight="800" fill="#202124" letter-spacing="-0.5">High-Altitude Infrastructure &amp; Security Boundary</text>
+    <text x="0" y="74" font-size="13.5" font-weight="500" fill="#687078">Separation of client tiers, authenticated edge gateways, zero-trust PostgreSQL RLS, and realtime telemetry</text>
+  </g>
+
+  <!-- TIER 1: FRONTEND & CLIENT RUNTIME (Top Box) -->
+  <g transform="translate(48, 120)" class="arch-sans">
+    <rect width="1104" height="110" rx="14" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1.5" filter="url(#archShadow)" />
+    <!-- Tier Label -->
+    <rect x="0" y="0" width="1104" height="28" rx="14" fill="#F8FAFC" />
+    <text x="16" y="19" font-size="11" font-weight="700" fill="#475569" letter-spacing="0.8">TIER 1: CLIENT APPLICATION &amp; PROGRESSIVE WEB APP (VERCEL EDGE CDN)</text>
+
+    <!-- Component 1: React & UI Framework -->
+    <g transform="translate(20, 42)">
+      <rect width="250" height="54" rx="10" fill="#F0F9FF" stroke="#BAE6FD" stroke-width="1" />
+      <text x="14" y="24" font-size="13.5" font-weight="700" fill="#0369A1">React 18 + TypeScript + Vite</text>
+      <text x="14" y="42" font-size="11.5" font-weight="500" fill="#0284C7">Tailwind CSS • Lucide Icons • Toast</text>
+    </g>
+
+    <!-- Component 2: PWA & Offline Engine -->
+    <g transform="translate(290, 42)">
+      <rect width="250" height="54" rx="10" fill="#FDF2F8" stroke="#FBCFE8" stroke-width="1" />
+      <text x="14" y="24" font-size="13.5" font-weight="700" fill="#9D174D">PWA Engine &amp; Offline Queue</text>
+      <text x="14" y="42" font-size="11.5" font-weight="500" fill="#BE185D">Service Worker v2 • IndexedDB Cache</text>
+    </g>
+
+    <!-- Component 3: Communication & Media -->
+    <g transform="translate(560, 42)">
+      <rect width="250" height="54" rx="10" fill="#FAF5FF" stroke="#E9D5FF" stroke-width="1" />
+      <text x="14" y="24" font-size="13.5" font-weight="700" fill="#6B21A8">WebRTC &amp; Audio Telemetry</text>
+      <text x="14" y="42" font-size="11.5" font-weight="500" fill="#7E22CE">P2P PeerConnection • MediaStream API</text>
+    </g>
+
+    <!-- Component 4: Client Auth & Session -->
+    <g transform="translate(830, 42)">
+      <rect width="254" height="54" rx="10" fill="#FEF2F2" stroke="#FECACA" stroke-width="1" />
+      <text x="14" y="24" font-size="13.5" font-weight="700" fill="#B42332">Auth &amp; Session Manager</text>
+      <text x="14" y="42" font-size="11.5" font-weight="500" fill="#DC2626">Google OAuth • JWT Session Refresh</text>
+    </g>
+  </g>
+
+  <!-- Connectors from Tier 1 to Tier 2 -->
+  <g class="arch-sans">
+    <line x1="300" y1="230" x2="300" y2="265" stroke="#B42332" stroke-width="2" marker-end="url(#archArrow)" />
+    <line x1="600" y1="230" x2="600" y2="265" stroke="#3B82F6" stroke-width="2" marker-end="url(#archArrowBlue)" />
+    <line x1="900" y1="230" x2="900" y2="265" stroke="#B42332" stroke-width="2" marker-end="url(#archArrow)" />
+    <text x="610" y="252" font-size="10.5" font-weight="600" fill="#687078" class="arch-mono">HTTPS / WSS / JWT</text>
+  </g>
+
+  <!-- TIER 2: API & SECURE GATEWAY (Middle Top) -->
+  <g transform="translate(48, 268)" class="arch-sans">
+    <rect width="1104" height="96" rx="14" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1.5" filter="url(#archShadow)" />
+    <!-- Tier Label -->
+    <rect x="0" y="0" width="1104" height="26" rx="13" fill="#F8FAFC" />
+    <text x="16" y="18" font-size="11" font-weight="700" fill="#475569" letter-spacing="0.8">TIER 2: SERVERLESS API ROUTING &amp; CLOUD EDGE FUNCTIONS</text>
+
+    <!-- Edge Gateway 1: Accept Request Route -->
+    <g transform="translate(20, 36)">
+      <rect width="335" height="46" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" />
+      <text x="14" y="20" font-size="12.5" font-weight="700" fill="#1E293B">POST /api/accept-request</text>
+      <text x="14" y="36" font-size="10.5" font-weight="500" fill="#64748B">Validated atomic acceptance &amp; room generation</text>
+    </g>
+
+    <!-- Edge Gateway 2: FCM Push Routing -->
+    <g transform="translate(380, 36)">
+      <rect width="335" height="46" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" />
+      <text x="14" y="20" font-size="12.5" font-weight="700" fill="#1E293B">POST /api/fcm/send • /api/push-notify</text>
+      <text x="14" y="36" font-size="10.5" font-weight="500" fill="#64748B">Vercel serverless push dispatch with failover</text>
+    </g>
+
+    <!-- Edge Gateway 3: Supabase Auth & JWT Check -->
+    <g transform="translate(740, 36)">
+      <rect width="344" height="46" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" />
+      <text x="14" y="20" font-size="12.5" font-weight="700" fill="#1E293B">Supabase Auth Gateway &amp; Roles</text>
+      <text x="14" y="36" font-size="10.5" font-weight="500" fill="#64748B">public.get_user_role() • claims extraction</text>
+    </g>
+  </g>
+
+  <!-- Connectors from Tier 2 to Tier 3 -->
+  <g class="arch-sans">
+    <line x1="300" y1="364" x2="300" y2="395" stroke="#B42332" stroke-width="2" marker-end="url(#archArrow)" />
+    <line x1="600" y1="364" x2="600" y2="395" stroke="#3ECF8E" stroke-width="2" marker-end="url(#archArrow)" />
+    <line x1="900" y1="364" x2="900" y2="395" stroke="#B42332" stroke-width="2" marker-end="url(#archArrow)" />
+    <text x="610" y="382" font-size="10.5" font-weight="600" fill="#687078" class="arch-mono">Postgres wire / Supabase Realtime</text>
+  </g>
+
+  <!-- TIER 3: DATA CORE & POSTGRESQL ENGINE (Bottom Center) -->
+  <g transform="translate(48, 398)" class="arch-sans">
+    <rect width="720" height="248" rx="14" fill="#FFFFFF" stroke="#3ECF8E" stroke-width="1.5" filter="url(#archShadow)" />
+    <!-- Tier Label -->
+    <rect x="0" y="0" width="720" height="28" rx="14" fill="#ECFDF5" />
+    <text x="16" y="19" font-size="11" font-weight="700" fill="#047857" letter-spacing="0.8">TIER 3: SUPABASE POSTGRESQL CORE &amp; RELATIONAL SCHEMAS</text>
+
+    <!-- Schema Groups Inside DB -->
+    <g transform="translate(20, 42)">
+      <!-- Box 1: Core Records -->
+      <g transform="translate(0, 0)">
+        <rect width="216" height="88" rx="8" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1" />
+        <text x="12" y="20" font-size="12" font-weight="700" fill="#111827">Clinical Schemas</text>
+        <text x="12" y="38" font-size="11" font-weight="500" fill="#4B5563">• profiles (UUID, role)</text>
+        <text x="12" y="54" font-size="11" font-weight="500" fill="#4B5563">• donors (blood_group, geo)</text>
+        <text x="12" y="70" font-size="11" font-weight="500" fill="#4B5563">• blood_requests (urgency)</text>
+      </g>
+
+      <!-- Box 2: Dispatch & Clearance -->
+      <g transform="translate(230, 0)">
+        <rect width="216" height="88" rx="8" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1" />
+        <text x="12" y="20" font-size="12" font-weight="700" fill="#111827">Dispatch &amp; Clearance</text>
+        <text x="12" y="38" font-size="11" font-weight="500" fill="#4B5563">• donor_responses (status)</text>
+        <text x="12" y="54" font-size="11" font-weight="500" fill="#4B5563">• medical_clearance_reviews</text>
+        <text x="12" y="70" font-size="11" font-weight="500" fill="#4B5563">• audit_trail_logs</text>
+      </g>
+
+      <!-- Box 3: Realtime Communication -->
+      <g transform="translate(460, 0)">
+        <rect width="216" height="88" rx="8" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1" />
+        <text x="12" y="20" font-size="12" font-weight="700" fill="#111827">Secure Messaging</text>
+        <text x="12" y="38" font-size="11" font-weight="500" fill="#4B5563">• conversations (case_id)</text>
+        <text x="12" y="54" font-size="11" font-weight="500" fill="#4B5563">• messages (encrypted_body)</text>
+        <text x="12" y="70" font-size="11" font-weight="500" fill="#4B5563">• call_signals (sdp, candidate)</text>
+      </g>
+    </g>
+
+    <!-- Atomic RPCs & Security Engine Subpanel -->
+    <g transform="translate(20, 142)">
+      <rect width="676" height="92" rx="10" fill="#F0FDF4" stroke="#BBF7D0" stroke-width="1" />
+      <text x="16" y="22" font-size="12" font-weight="700" fill="#15803D">Row-Level Security (RLS) &amp; Atomic Stored Procedures (PL/pgSQL)</text>
+      <text x="16" y="44" font-size="11" font-weight="500" fill="#166534">
+        • <tspan font-weight="700">accept_blood_request_atomic:</tspan> Prevents race conditions during concurrent donor acceptances.
+      </text>
+      <text x="16" y="62" font-size="11" font-weight="500" fill="#166534">
+        • <tspan font-weight="700">review_donor_medical_clearance:</tspan> Enforces clinician verification and audit logging.
+      </text>
+      <text x="16" y="80" font-size="11" font-weight="500" fill="#166534">
+        • <tspan font-weight="700">Zero-Trust Policies:</tspan> Strict user ID checks on conversation threads, profile updates, and blood requests.
+      </text>
+    </g>
+  </g>
+
+  <!-- TIER 4: EXTERNAL TELEMETRY & SERVICES (Bottom Right) -->
+  <g transform="translate(790, 398)" class="arch-sans">
+    <rect width="362" height="248" rx="14" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1.5" filter="url(#archShadow)" />
+    <!-- Tier Label -->
+    <rect x="0" y="0" width="362" height="28" rx="14" fill="#F8FAFC" />
+    <text x="16" y="19" font-size="11" font-weight="700" fill="#475569" letter-spacing="0.8">TIER 4: TELEMETRY &amp; EXTERNAL APIS</text>
+
+    <!-- Service 1: Firebase Cloud Messaging -->
+    <g transform="translate(18, 42)">
+      <rect width="326" height="54" rx="8" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="#B45309">Firebase Cloud Messaging (FCM)</text>
+      <text x="14" y="42" font-size="11" font-weight="500" fill="#D97706">High-priority push notifications &amp; tokens</text>
+    </g>
+
+    <!-- Service 2: WebRTC Media Gateway -->
+    <g transform="translate(18, 108)">
+      <rect width="326" height="54" rx="8" fill="#F0FDF4" stroke="#BBF7D0" stroke-width="1" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="#15803D">Google STUN / Public TURN</text>
+      <text x="14" y="42" font-size="11" font-weight="500" fill="#166534">NAT traversal &amp; direct P2P audio pipeline</text>
+    </g>
+
+    <!-- Service 3: OpenStreetMap & Reverse Geocode -->
+    <g transform="translate(18, 174)">
+      <rect width="326" height="54" rx="8" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="#1D4ED8">OpenStreetMap / Nominatim</text>
+      <text x="14" y="42" font-size="11" font-weight="500" fill="#2563EB">Live reverse geocoding &amp; address resolution</text>
+    </g>
+  </g>
+</svg>
