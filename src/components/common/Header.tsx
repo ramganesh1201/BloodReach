@@ -138,13 +138,18 @@ export const Header: React.FC = () => {
     return location.pathname.startsWith(path);
   };
 
+  // Render technical session/database status bar ONLY when explicitly requested via ?debug=true
+  const showDebugBar = Boolean(
+    typeof window !== 'undefined' && window.location.search.includes('debug=true')
+  );
+
   return (
     <>
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
 
       <header className="sticky top-0 z-40 bg-app-surface/95 backdrop-blur-md border-b border-app-border shadow-subtle transition-all">
-        {/* Top Status & Role Indicator Bar */}
-        {authenticatedRole ? (
+        {/* Top Status & Role Indicator Bar - Restricted to DEV or ?debug=true */}
+        {authenticatedRole && showDebugBar ? (
           <div className="bg-app-text text-app-muted text-xs py-1.5 px-3 sm:px-4 border-b border-app-text/20">
             <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
@@ -178,16 +183,16 @@ export const Header: React.FC = () => {
             </div>
           </div>
         ) : demoExperience ? (
-          <div className="bg-app-text text-app-muted text-xs py-1.5 px-3 sm:px-4 border-b border-app-text/20">
+          <div className="bg-amber-900/90 text-amber-100 text-xs py-1 px-3 sm:px-4 border-b border-amber-700/50">
             <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-warning/20 text-warning-light border border-warning/30 uppercase tracking-wider shrink-0">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-200 border border-amber-500/30 uppercase tracking-wider shrink-0">
                   ROLE PREVIEW
                 </span>
-                <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase tracking-wider shrink-0">
+                <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase tracking-wider shrink-0">
                   Demo Fixtures
                 </span>
-                <span className="text-app-muted font-medium text-xs truncate max-w-[120px] sm:max-w-none">
+                <span className="text-amber-100 font-medium text-xs truncate max-w-[120px] sm:max-w-none">
                   Active as <strong className="text-white">{ROLE_DISPLAY_NAMES[demoExperience]}</strong>
                 </span>
               </div>
@@ -196,9 +201,9 @@ export const Header: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleExitDemo}
-                  className="bg-app-text/60 hover:bg-app-text text-white text-xs font-semibold px-2 py-0.5 rounded-sm transition-colors flex items-center gap-1 border border-app-border/30"
+                  className="bg-amber-800/80 hover:bg-amber-800 text-white text-xs font-semibold px-2 py-0.5 rounded transition-colors flex items-center gap-1 border border-amber-600/50"
                 >
-                  <LogOut className="w-3 h-3 text-warning" />
+                  <LogOut className="w-3 h-3 text-amber-300" />
                   <span className="hidden sm:inline">Exit Role Preview</span>
                   <span className="sm:hidden">Exit</span>
                 </button>
@@ -382,15 +387,17 @@ export const Header: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                    className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-lg border border-app-border hover:bg-app-muted text-xs font-semibold text-app-text transition-colors"
+                    className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-lg border border-app-border hover:bg-app-muted text-xs font-semibold text-app-text transition-colors min-h-[44px] min-w-[44px] sm:min-w-0"
+                    aria-label="User profile and account settings"
+                    aria-expanded={profileDropdownOpen}
                   >
-                    <div className="w-6 h-6 rounded-md bg-brand-light text-brand flex items-center justify-center font-bold text-xs">
+                    <div className="w-6 h-6 rounded-md bg-brand-light text-brand flex items-center justify-center font-bold text-xs shrink-0">
                       {currentUser?.fullName?.charAt(0) || currentRole.charAt(0).toUpperCase()}
                     </div>
                     <span className="hidden sm:inline truncate max-w-[120px]">
                       {currentUser?.fullName || ROLE_DISPLAY_NAMES[currentRole]}
                     </span>
-                    <ChevronDown className="w-3.5 h-3.5 text-app-text-secondary" />
+                    <ChevronDown className="w-3.5 h-3.5 text-app-text-secondary shrink-0" />
                   </button>
 
                   {profileDropdownOpen && (

@@ -71,7 +71,7 @@ export const StatCard: React.FC<StatCardProps> = ({
           <p className="text-xs font-semibold uppercase tracking-wider text-app-text-secondary truncate">
             {label}
           </p>
-          <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-app-text font-display leading-tight">
+          <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-app-text font-display leading-tight tabular-nums">
             {value}
           </p>
           {subtext && (

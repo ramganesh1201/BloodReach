@@ -315,7 +315,7 @@ export const ChatTimeline: React.FC<ChatTimelineProps> = ({
                         isSender ? 'text-white/75' : 'text-[#69716F]'
                       }`}
                     >
-                      <span>
+                      <span className="tabular-nums font-mono">
                         {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                       {isSender && renderDeliveryStatus(msg.deliveryStatus)}
